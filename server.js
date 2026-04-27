@@ -374,6 +374,19 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Expor chaves necessárias para views (APENAS a anon key será usada no cliente)
 app.use((req, res, next) => {
+    // --- BYPASS LOGIN (Sempre Autenticado) ---
+    if (!req.session.userId) {
+        req.session.userId = 1;
+        req.session.username = 'Usuário Master';
+        req.session.email = 'arremataapp@gmail.com';
+        req.session.isAdmin = true;
+    }
+    
+    // Se tentar acessar o login ou registro, redireciona para a home
+    if (req.path === '/login' || req.path === '/register') {
+        return res.redirect('/');
+    }
+
     res.locals.supabaseUrl = '';
     res.locals.supabaseAnonKey = '';
     res.locals.username = req.session?.username || '';
@@ -865,12 +878,9 @@ await ensureAdminUser();
 await ensureSecondaryUser();
 // ========================================
 
-// --- Middleware de Autenticação ---
+// --- Middleware de Autenticação (Bypass Ativado) ---
 const isAuthenticated = (req, res, next) => {
-    if (req.session.userId) {
-        return next();
-    }
-    res.redirect('/login');
+    return next();
 };
 
 // Helper para criar contexto de usuário consistente
@@ -1066,21 +1076,9 @@ app.post('/api/analise-documentos/process', isAuthenticated, memoryUpload.fields
 app.use('/', (await import('./routes/auth.js')).default);
 
 
-// Middleware de Verificação de Admin Estrita
+// Middleware de Verificação de Admin Estrita (Bypass Ativado)
 const requireAdmin = (req, res, next) => {
-    if (!req.session.userId) return res.redirect('/login');
-
-    // Lista hardcoded de admins permitidos (Camada extra de segurança)
-    const ALLOWED_ADMINS = []; // Removido fortalestrutura@gmail.com como solicitado
-    const isAdminEmail = req.session.email && ALLOWED_ADMINS.includes(req.session.email.toLowerCase());
-
-    // Verifica flag do banco E lista de email
-    if (req.session.isAdmin || isAdminEmail) {
-        return next();
-    }
-
-    console.warn(`Tentativa de acesso não autorizado ao admin por: ${req.session.email}`);
-    res.status(403).send('Acesso Negado: Apenas administradores podem acessar esta página.');
+    return next();
 };
 
 // Rota para listar convites (admin)

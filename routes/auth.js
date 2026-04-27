@@ -73,25 +73,11 @@ router.post('/login', authLimiter, async (req, res) => {
 
 // Logout Route
 router.post('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-            return res.redirect('/');
-        }
-        res.clearCookie('arremata.sid');
-        res.redirect('/login');
-    });
+    res.redirect('/');
 });
 
 router.get('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-            return res.redirect('/');
-        }
-        res.clearCookie('arremata.sid');
-        res.redirect('/login');
-    });
+    res.redirect('/');
 });
 
 export default router;
