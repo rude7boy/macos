@@ -64,64 +64,7 @@
             <i id="macos-theme-icon-light" class="fa-solid fa-sun" style="display: none; color: #F59E0B;"></i>
         </label>
 
-        <!-- Profile Dropdown -->
-        <div class="relative">
-            <button id="macosProfileBtn" class="macos-toolbar-icon-btn" title="Perfil">
-                <% if (typeof profile_pic_url !=='undefined' && profile_pic_url) { %>
-                    <img src="<%= profile_pic_url %>" alt="Perfil"
-                        style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
-                    <% } else { %>
-                        <i class="fa-regular fa-circle-user" style="font-size: 16px;"></i>
-                        <% } %>
-            </button>
-
-            <!-- Profile Popup -->
-            <div id="macosProfilePopup" class="macos-window"
-                style="display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 280px; z-index: 9999;">
-                <div style="padding: 16px;">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-                        <% if (typeof profile_pic_url !=='undefined' && profile_pic_url) { %>
-                            <img src="<%= profile_pic_url %>" alt="Foto de Perfil"
-                                style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">
-                            <% } else { %>
-                                <div
-                                    style="width: 48px; height: 48px; border-radius: 50%; background: var(--macos-bg-tertiary); display: flex; align-items: center; justify-content: center;">
-                                    <i class="fa-solid fa-user text-xl"></i>
-                                </div>
-                                <% } %>
-                                    <div>
-                                        <p style="font-weight: 600; color: var(--macos-text-primary); font-size: 14px;">
-                                            <%= typeof username !=='undefined' ? username : 'Usuário' %>
-                                        </p>
-                                        <p style="font-size: 12px; color: var(--macos-text-secondary);">
-                                            <%= typeof email !=='undefined' ? email : '' %>
-                                        </p>
-                                    </div>
-                    </div>
-
-                    <div class="macos-divider"></div>
-
-                    <nav style="display: flex; flex-direction: column; gap: 4px;">
-                        <a href="/perfil" class="macos-sidebar-item">
-                            <span class="macos-sidebar-item-icon">
-                                <i class="fa-regular fa-id-card"></i>
-                            </span>
-                            <span class="macos-sidebar-item-text">Meu Perfil</span>
-                        </a>
-
-                        <form id="macosLogoutForm" action="/logout" method="POST" style="margin: 0; width: 100%;">
-                            <button type="submit" class="macos-sidebar-item"
-                                style="width: 100%; border: none; background: none; cursor: pointer; color: var(--macos-red); font: inherit; text-align: left; padding: 6px 12px;">
-                                <span class="macos-sidebar-item-icon">
-                                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
-                                </span>
-                                <span class="macos-sidebar-item-text">Sair</span>
-                            </button>
-                        </form>
-                    </nav>
-                </div>
-            </div>
-        </div>
+        <!-- (Profile Dropdown Removido - Sistema de Login Desativado) -->
     </div>
 </div>
 
@@ -129,22 +72,6 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/+esm';
     const SUPABASE_URL = <%= JSON.stringify(typeof supabaseUrl !== 'undefined' ? supabaseUrl : '') %>;
     const SUPABASE_ANON_KEY = <%= JSON.stringify(typeof supabaseAnonKey !== 'undefined' ? supabaseAnonKey : '') %>;
-
-    // Profile Popup Logic
-    const macosProfileBtn = document.getElementById('macosProfileBtn');
-    const macosProfilePopup = document.getElementById('macosProfilePopup');
-    if (macosProfileBtn && macosProfilePopup) {
-        macosProfileBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            macosProfilePopup.style.display = macosProfilePopup.style.display === 'none' ? 'block' : 'none';
-        });
-
-        document.addEventListener('click', (e) => {
-            if (macosProfilePopup.style.display !== 'none' && !macosProfilePopup.contains(e.target) && !macosProfileBtn.contains(e.target)) {
-                macosProfilePopup.style.display = 'none';
-            }
-        });
-    }
 
     // Theme Toggle Logic
     const themeToggle = document.getElementById('macos-theme-toggle');
@@ -169,7 +96,6 @@
             localStorage.setItem('theme', theme);
         };
 
-        // Carregar tema salvo ou default 'dark'
         const savedTheme = localStorage.getItem('theme') || 'dark';
         applyTheme(savedTheme);
 
@@ -178,21 +104,5 @@
         });
     }
 
-    // Logout Logic
-    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const logoutForm = document.getElementById('macosLogoutForm');
-        if (logoutForm) {
-            logoutForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                try {
-                    await supabase.auth.signOut();
-                } catch (err) {
-                    console.error('Erro deslogando Supabase:', err);
-                }
-                await fetch('/logout', { method: 'POST' });
-                window.location.href = '/login';
-            });
-        }
-    }
+    // Logout Logic (Removido - Sistema de Login Desativado)
 </script>
