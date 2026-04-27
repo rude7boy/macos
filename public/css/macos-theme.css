@@ -268,7 +268,7 @@ h6 {
    5. SIDEBAR macOS (Estilo Finder)
    ============================================ */
 .macos-sidebar {
-    width: 240px;
+    width: 280px;
     background: var(--macos-bg-sidebar);
     /* backdrop-filter removido */
     /* -webkit-backdrop-filter removido */
@@ -314,24 +314,24 @@ h6 {
 
 /* === Seções da Sidebar === */
 .macos-sidebar-section {
-    padding: 12px 8px;
+    padding: 8px 4px;
 }
 
 .macos-sidebar-section-title {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: var(--macos-text-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 0 8px 8px 8px;
+    padding: 12px 8px 4px 12px;
 }
 
 /* === Itens do Menu === */
 .macos-sidebar-item {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
-    margin: 2px 0;
+    padding: 6px 12px;
+    margin: 1px 0;
     border-radius: var(--macos-radius-sm);
     color: var(--macos-text-primary);
     text-decoration: none;
@@ -392,7 +392,7 @@ h6 {
     border-bottom: 1px solid var(--macos-divider);
     position: fixed;
     top: 0;
-    left: 240px;
+    left: 280px;
     right: 0;
     z-index: 999;
     display: flex;

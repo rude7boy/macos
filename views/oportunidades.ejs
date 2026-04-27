@@ -4,14 +4,16 @@
 <head>
     <%- include('partials/head') %>
         <title>Banco de Oportunidades</title>
-        <!-- Leaflet Maps CSS -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
         <style>
             :root {
                 --map-height: 380px;
             }
+
+            /* Map Cursor Navigation Styles */
+            .leaflet-container { cursor: grab !important; }
+            .leaflet-dragging .leaflet-container { cursor: grabbing !important; }
+            .leaflet-interactive { cursor: pointer !important; }
 
             /* MODAL VISIBILITY CLASS */
             .macos-modal-overlay {
@@ -80,7 +82,7 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 16px;
+                margin-bottom: 32px;
                 flex-shrink: 0;
                 padding: 0 4px;
             }
@@ -418,9 +420,7 @@
 <body class="macos-theme">
 
     <!-- Dados brutos para JS -->
-    <script id="opportunities-raw-data" type="application/json">
-        <%- JSON.stringify(oportunidades || []) %>
-    </script>
+
 
     <div class="macos-layout">
         <!-- Toolbar (Top) -->
@@ -431,13 +431,21 @@
 
                 <!-- Conteúdo Principal -->
                 <main class="macos-main-content">
-
-                    <div class="stack-layout">
+                    <script id="opportunities-raw-data" type="application/json">
+                        <%- JSON.stringify(oportunidades) %>
+                    </script>
+                    <div class="macos-container">
+                        <div class="stack-layout">
 
                         <!-- 1. MAPA NO TOPO (FIXO) -->
                         <div class="map-header-container">
-                            <div class="map-rounded-box">
-                                <div id="map-view"></div>
+                            <div class="map-rounded-box" style="position: relative;">
+                                <div id="map-placeholder" style="position: absolute; inset: 0; z-index: 20; background: var(--macos-bg-secondary); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                    <i class="fa-solid fa-map-location-dot" style="font-size: 48px; color: var(--macos-accent); margin-bottom: 16px;"></i>
+                                    <h3 style="margin:0; font-size: 18px; color: var(--macos-text-primary);">Selecione um Estado</h3>
+                                    <p style="color: var(--macos-text-secondary); font-size: 13px; margin-top: 8px;">Escolha o estado abaixo para carregar o mapa interativo.</p>
+                                </div>
+                                <div id="map-view" style="opacity: 0; transition: opacity 0.3s; pointer-events: none;"></div>
                             </div>
                         </div>
 
@@ -450,7 +458,7 @@
                                     <h2
                                         style="font-size: 20px; font-weight: 700; margin: 0; color: var(--macos-text-primary);">
                                         Oportunidades Disponíveis</h2>
-                                    <span
+                                    <span id="oportunidades-count"
                                         style="font-size: 13px; color: var(--macos-text-secondary); background:var(--macos-bg-tertiary); padding:2px 8px; border-radius:12px;">
                                         <%= oportunidades.length %> imóveis
                                     </span>
@@ -460,13 +468,11 @@
                                     <!-- Filtro Customizado -->
                                     <div class="filter-container">
                                         <select id="listaFiltroEstado" class="macos-select-custom">
-                                            <option value="">Todos os Estados</option>
+                                            <option value="">Selecione um Estado</option>
                                         </select>
                                     </div>
 
-                                    <button id="triggerAddOp" class="macos-btn-primary" type="button">
-                                        <i class="fa-solid fa-plus mr-2"></i> Adicionar Imóvel
-                                    </button>
+                                    <!-- Botão de Adicionar Imóvel removido (Integração Python) -->
                                 </div>
                             </div>
 
@@ -482,7 +488,7 @@
                                     </div>
                                     <% } else { %>
                                         <% oportunidades.forEach(op=> { %>
-                                            <div class="opportunity-card" id="card-<%= op.id %>"
+                                            <div class="opportunity-card" id="card-<%= op.id %>" data-estado="<%= op.estado %>"
                                                 onclick="focusOnMap(<%= op.latitude %>, <%= op.longitude %>, '<%= op.id %>')"
                                                 onmouseenter="highlightPin('<%= op.id %>')"
                                                 onmouseleave="unhighlightPin('<%= op.id %>')">
@@ -543,15 +549,12 @@
                                                             </span>
                                                         </div>
                                                         <div class="metric-mini">
-                                                            <label>Comissão Est.</label>
-                                                            <span class="green"
-                                                                style="cursor: pointer; text-decoration: underline; text-decoration-style: dotted;"
-                                                                onclick="event.stopPropagation(); openCommissionModal('<%= op.id %>')">
-                                                                <%= (op.lucro_estimado || 0).toLocaleString('pt-BR',
-                                                                    {style: 'currency' , currency: 'BRL' ,
-                                                                    maximumFractionDigits:0}) %>
+                                                            <label>ROI Estimado</label>
+                                                            <span class="green">
+                                                                <%= (op.roi_estimado || 0) %>%
                                                             </span>
                                                         </div>
+
                                                     </div>
 
                                                     <button type="button" class="btn-view-details"
@@ -566,7 +569,6 @@
 
                         </div>
                     </div>
-                </main>
     </div>
 
     <!-- MODAIS (Mantidos funcionais) -->
@@ -596,7 +598,6 @@
             <form id="addForm" onsubmit="submitDetails(event)"
                 style="padding: 24px; overflow-y: auto; flex: 1; background: var(--macos-bg-base);">
 
-                <!-- Import Callout -->
                 <!-- Import Callout (Clean) -->
                 <div
                     style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding: 12px 16px; background: var(--macos-bg-tertiary); border-radius: 12px; border: 1px solid var(--macos-divider);">
@@ -880,113 +881,182 @@
 
             </div>
         </div>
-    </div>
+        
 
-    <!-- SCRIPTS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
-        // --- DADOS ---
-        let opportunities = [];
+        // --- LÓGICA DE ESTADO & MAPA (STATE-DRIVEN) ---
+
+        window.opportunities = [];
         try {
-            opportunities = JSON.parse(document.getElementById('opportunities-raw-data').textContent);
-        } catch (e) { console.error(e); }
+            const rawData = document.getElementById('opportunities-raw-data');
+            if (rawData) {
+                window.opportunities = JSON.parse(rawData.textContent.trim());
+            }
+        } catch (e) { console.error("Erro ao ler dados:", e); }
 
-        // --- MAPA ---
-        let map, markersMap = new Map();
+        function initEstadoLogic() {
+            const selectEl = document.getElementById('listaFiltroEstado');
+            if (!selectEl) return;
 
-        function initMap() {
-            // Se já inicializou, sai
-            if (map) return;
+            // Evitar re-população se já foi feito
+            if (selectEl.options.length <= 1) {
+                // Popular select com todos os estados brasileiros
+                const brStates = [
+                    { uf: 'AC', nome: 'Acre' }, { uf: 'AL', nome: 'Alagoas' }, { uf: 'AP', nome: 'Amapá' },
+                    { uf: 'AM', nome: 'Amazonas' }, { uf: 'BA', nome: 'Bahia' }, { uf: 'CE', nome: 'Ceará' },
+                    { uf: 'DF', nome: 'Distrito Federal' }, { uf: 'ES', nome: 'Espírito Santo' }, { uf: 'GO', nome: 'Goiás' },
+                    { uf: 'MA', nome: 'Maranhão' }, { uf: 'MT', nome: 'Mato Grosso' }, { uf: 'MS', nome: 'Mato Grosso do Sul' },
+                    { uf: 'MG', nome: 'Minas Gerais' }, { uf: 'PA', nome: 'Pará' }, { uf: 'PB', nome: 'Paraíba' },
+                    { uf: 'PR', nome: 'Paraná' }, { uf: 'PE', nome: 'Pernambuco' }, { uf: 'PI', nome: 'Piauí' },
+                    { uf: 'RJ', nome: 'Rio de Janeiro' }, { uf: 'RN', nome: 'Rio Grande do Norte' }, { uf: 'RS', nome: 'Rio Grande do Sul' },
+                    { uf: 'RO', nome: 'Rondônia' }, { uf: 'RR', nome: 'Roraima' }, { uf: 'SC', nome: 'Santa Catarina' },
+                    { uf: 'SP', nome: 'São Paulo' }, { uf: 'SE', nome: 'Sergipe' }, { uf: 'TO', nome: 'Tocantins' }
+                ];
+                
+                selectEl.innerHTML = '<option value="">Selecione um Estado</option>';
+                brStates.forEach(st => {
+                    const opt = document.createElement('option');
+                    opt.value = st.uf;
+                    opt.textContent = `${st.uf} - ${st.nome}`;
+                    selectEl.appendChild(opt);
+                });
+            }
 
-            // Limites do Brasil (South West, North East)
-            const brazilBounds = [
-                [-35, -75], // SW (RS/Acre border approx)
-                [6, -32]    // NE (Amapá/Noronha approx)
-            ];
+            selectEl.removeEventListener('change', handleStateSelection);
+            selectEl.addEventListener('change', handleStateSelection);
+            
+            // Run initial sync without triggering map if not selected
+            handleStateSelection();
+        }
 
-            // Cria o mapa restrito ao Brasil
-            map = L.map('map-view', {
+        async function handleStateSelection() {
+            const state = document.getElementById('listaFiltroEstado').value;
+            
+            // 1. Filtrar Cards
+            const cards = document.querySelectorAll('.opportunity-card');
+            let count = 0;
+            cards.forEach(card => {
+                // Se nenhum estado for selecionado, mostramos tudo
+                if (!state || card.dataset.estado === state) {
+                    card.style.display = 'flex';
+                    count++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            const counterEl = document.getElementById('oportunidades-count');
+            if (counterEl) counterEl.textContent = count + ' imóveis';
+
+            // 2. Controle do Mapa
+            const placeholder = document.getElementById('map-placeholder');
+            const mapView = document.getElementById('map-view');
+
+            if (!state) {
+                // Mostrar placeholder
+                placeholder.style.display = 'flex';
+                mapView.style.opacity = '0';
+                mapView.style.pointerEvents = 'none';
+                
+                if (window.map) {
+                    try { window.map.remove(); } catch(e){}
+                    window.map = null;
+                }
+            } else {
+                // Mostrar mapa
+                placeholder.style.display = 'none';
+                mapView.style.opacity = '1';
+                mapView.style.pointerEvents = 'auto';
+                
+                initMapForState(state || 'CE'); // Default to Ceará or first state
+            }
+        }
+
+        async function initMapForState(state) {
+            const container = document.getElementById('map-view');
+            
+            if (typeof L === 'undefined') {
+                setTimeout(() => initMapForState(state), 150);
+                return;
+            }
+            
+            if (window.map) {
+                try { window.map.remove(); } catch(e){}
+                window.map = null;
+            }
+            if (container._leaflet_id) container._leaflet_id = null;
+
+            // Inicia o mapa
+            window.map = L.map('map-view', {
                 zoomControl: false,
-                scrollWheelZoom: true,  // Permite zoom com scroll/pinça
-                touchZoom: true,        // Permite gestos de toque
-                bounceAtZoomLimits: true,
-                minZoom: 4,
-                maxBounds: brazilBounds,
-                maxBoundsViscosity: 0.8 // Um pouco mais elástico
-            }).setView([-14.2, -51.9], 4);
+                scrollWheelZoom: true,
+                touchZoom: true
+            });
 
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            L.control.zoom({ position: 'bottomright' }).addTo(window.map);
 
-            // Tiles Clean
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; OSM &copy; CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
-            }).addTo(map);
+            }).addTo(window.map);
 
-            // Pins
-            const bounds = [];
-            opportunities.forEach(op => {
+            window.markersMap = new Map();
+
+            // Puxa o contorno do Estado via IBGE
+            try {
+                // Usa a sigla do estado para buscar a malha geográfica
+                const response = await fetch(`https://servicodados.ibge.gov.br/api/v3/malhas/estados/${state}?formato=application/vnd.geo+json`);
+                if (response.ok) {
+                    const geoData = await response.json();
+                    const geoLayer = L.geoJSON(geoData, {
+                        style: {
+                            color: 'var(--macos-accent)',
+                            weight: 2,
+                            opacity: 0.6,
+                            fillColor: 'var(--macos-accent)',
+                            fillOpacity: 0.1
+                        }
+                    }).addTo(window.map);
+                    
+                    // Centraliza o mapa perfeitamente no estado
+                    window.map.fitBounds(geoLayer.getBounds(), { padding: [20, 20] });
+                } else {
+                    window.map.setView([-14.2, -51.9], 4);
+                }
+            } catch (err) {
+                console.error("Erro ao carregar contorno do estado:", err);
+                window.map.setView([-14.2, -51.9], 4);
+            }
+
+            // Adiciona os Pins apenas deste estado
+            const stateOps = window.opportunities.filter(op => op.estado === state);
+            
+            stateOps.forEach(op => {
                 if (op.latitude && op.longitude) {
                     const icon = L.divIcon({
                         className: 'custom-pin',
-                        html: `<div id="pin-${op.id}" style="
-                            width: 14px; height: 14px; 
-                            background: var(--macos-accent); 
-                            border: 2px solid white; 
-                            border-radius: 50%; 
-                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                            transition: transform 0.2s;
-                        "></div>`,
+                        html: `<div id="pin-${op.id}" style="width: 14px; height: 14px; background: var(--macos-accent); border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.2s;"></div>`,
                         iconSize: [14, 14],
                         iconAnchor: [7, 7]
                     });
 
-                    const marker = L.marker([op.latitude, op.longitude], { icon: icon }).addTo(map);
+                    const marker = L.marker([op.latitude, op.longitude], { icon: icon }).addTo(window.map);
 
-                    // Click Pin -> Scroll Lista
                     marker.on('click', () => {
                         const card = document.getElementById(`card-${op.id}`);
                         if (card) {
                             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            // Highlight visual
-                            card.style.borderColor = 'var(--macos-accent)';
-                            setTimeout(() => card.style.borderColor = '', 2000);
                         }
                     });
-
-                    markersMap.set(op.id.toString(), marker);
-                    bounds.push([op.latitude, op.longitude]);
                 }
             });
-
-            // --- BRAZIL BORDER (Linha Forte) ---
-            fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/BRA.geo.json')
-                .then(r => r.json())
-                .then(data => {
-                    L.geoJSON(data, {
-                        style: {
-                            color: '#1a1a1a',      // Cor escura/forte
-                            weight: 3,             // Espessura da linha
-                            opacity: 0.8,          // Opacidade alta
-                            fillColor: 'transparent',
-                            fillOpacity: 0
-                        }
-                    }).addTo(map);
-                })
-                .catch(e => console.warn('Falha ao carregar fronteiras:', e));
-
-            // Ajustar Zoom
-            if (bounds.length > 0) {
-                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-            }
         }
 
         // --- INTERAÇÕES ---
         window.focusOnMap = function (lat, lng, id) {
-            if (!lat || !lng) return;
-            map.flyTo([lat, lng], 15, { duration: 1.5 });
+            if (!lat || !lng || !window.map) return;
+            window.map.flyTo([lat, lng], 15, { duration: 1.5 });
         }
 
         window.highlightPin = function (id) {
@@ -1021,8 +1091,8 @@
         // (Reimplementação simplificada das funções essenciais)
 
         // --- NEW MODAL LOGIC (CLEAN) ---
-        const modalAdd = document.getElementById('addModal');
-        const btnAdd = document.getElementById('triggerAddOp');
+        var modalAdd = document.getElementById('addModal');
+        var btnAdd = document.getElementById('triggerAddOp');
 
         if (btnAdd && modalAdd) {
             btnAdd.addEventListener('click', (e) => {
@@ -1090,9 +1160,9 @@
         }
 
         // --- ENDEREÇO & AUTOCOMPLETE ---
-        let miniMap = null;
-        let miniMarker = null;
-        let debounceTimer = null;
+        var miniMap = null;
+        var miniMarker = null;
+        var debounceTimer = null;
 
         function handleAddressInput(query) {
             clearTimeout(debounceTimer);
@@ -1362,8 +1432,8 @@
         };
 
         // Explicit Overlay Click Listener
-        const dModal = document.getElementById('detailsModal');
-        const dWindow = document.getElementById('detailsWindow');
+        var dModal = document.getElementById('detailsModal');
+        var dWindow = document.getElementById('detailsWindow');
         if (dModal && dWindow) {
             dModal.addEventListener('click', function (e) {
                 if (e.target === dModal) {
@@ -1382,10 +1452,33 @@
                     m.classList.add('is-visible');
                 }
             }, 10);
+        };
+
+        // Inicializar lógica de estados
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            initEstadoLogic();
+            // Trigger initial selection if desired
+            setTimeout(() => {
+                const select = document.getElementById('listaFiltroEstado');
+                if (select && !select.value) {
+                    select.value = 'CE'; // Default initial state
+                    handleStateSelection();
+                }
+            }, 100);
+        } else {
+            document.addEventListener('DOMContentLoaded', () => {
+                initEstadoLogic();
+                const select = document.getElementById('listaFiltroEstado');
+                if (select && !select.value) {
+                    select.value = 'CE';
+                    handleStateSelection();
+                }
+            });
         }
 
-        document.addEventListener('DOMContentLoaded', initMap);
 
+        // Suporte para PJAX/Navegação Dinâmica
+        document.addEventListener('pjax:complete', initEstadoLogic);
     </script>
     <!-- CLIENT SELECTION MODAL -->
     <div id="clientSelectModal" class="macos-modal-overlay" style="z-index: 100000;">
@@ -1409,7 +1502,7 @@
 
     <script>
         // Global var to store current OP ID for client selection
-        let currentOpIdForClient = null;
+        var currentOpIdForClient = null;
 
         function openClientModal(opId) {
             currentOpIdForClient = opId;
@@ -1479,159 +1572,10 @@
     <script>
         // ... Existing scripts ...
     </script>
-    <!-- Modal Comissões (Detalhado) -->
-    <div id="commissionModal" class="macos-modal-overlay" style="z-index: 99999;">
-        <div class="macos-window"
-            style="width: 480px; max-width: 90%; background: var(--macos-bg-secondary); border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
 
-            <!-- Header -->
-            <div class="modal-header"
-                style="background: var(--macos-bg-base); padding: 20px 24px; border-bottom: 1px solid var(--macos-divider); display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="margin:0; font-size: 16px; font-weight: 700; color: var(--macos-text-primary);">Simulador
-                        de Comissões</h3>
-                    <p style="margin:0; font-size: 12px; color: var(--macos-text-secondary);" id="commModalSubtitle">
-                        Detalhamento Financeiro</p>
-                </div>
-                <button onclick="closeCommissionModal()"
-                    style="border:none; background:var(--macos-bg-tertiary); width:28px; height:28px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; color: var(--macos-text-primary);">
-                    <i class="fa-solid fa-times"></i>
-                </button>
-            </div>
 
-            <!-- Body -->
-            <div style="padding: 24px; background: var(--macos-bg-base);">
 
-                <!-- Top Summary -->
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <p
-                        style="font-size: 12px; text-transform: uppercase; font-weight: 600; color: var(--macos-text-secondary); margin-bottom: 4px;">
-                        Resultado Líquido Estimado</p>
-                    <h2 style="font-size: 32px; font-weight: 800; color: #10b981; margin: 0;" id="commModalLucro">R$
-                        0,00</h2>
-                </div>
-
-                <!-- Breakdown List -->
-                <div
-                    style="background: var(--macos-bg-tertiary); border-radius: 12px; padding: 16px; border: 1px solid var(--macos-divider);">
-
-                    <!-- Item 1: Mineração (Estudo) -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--macos-divider); margin-bottom: 12px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <div
-                                style="width: 32px; height: 32px; background: #FFF7ED; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #F97316;">
-                                <i class="fa-solid fa-microscope" style="font-size: 14px;"></i>
-                            </div>
-                            <div>
-                                <p
-                                    style="font-size: 13px; font-weight: 600; color: var(--macos-text-primary); margin: 0;">
-                                    Fominha de Estudo</p>
-                                <p style="font-size: 11px; color: var(--macos-text-secondary); margin: 0;">Para <span
-                                        id="commModalMineradorName">...</span></p>
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <p style="font-size: 13px; font-weight: 700; color: #F97316; margin: 0;"
-                                id="commModalMiningFee">R$ 500,00</p>
-                            <p style="font-size: 10px; color: var(--macos-text-secondary); margin: 0;">Fixo por estudo
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Item 2: Corretagem (Venda) -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--macos-divider); margin-bottom: 12px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <div
-                                style="width: 32px; height: 32px; background: #EFF6FF; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #3B82F6;">
-                                <i class="fa-solid fa-handshake" style="font-size: 14px;"></i>
-                            </div>
-                            <div>
-                                <p
-                                    style="font-size: 13px; font-weight: 600; color: var(--macos-text-primary); margin: 0;">
-                                    Comissão de Venda</p>
-                                <p style="font-size: 11px; color: var(--macos-text-secondary); margin: 0;">Responsável
-                                    Pela Venda</p>
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <p style="font-size: 13px; font-weight: 700; color: #3B82F6; margin: 0;"
-                                id="commModalSalesFee">R$ 0,00</p>
-                            <p style="font-size: 10px; color: var(--macos-text-secondary); margin: 0;">6% do VGV</p>
-                        </div>
-                    </div>
-
-                    <!-- Item 3: Investidor -->
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <div
-                                style="width: 32px; height: 32px; background: #F0FDF4; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #10B981;">
-                                <i class="fa-solid fa-coins" style="font-size: 14px;"></i>
-                            </div>
-                            <div>
-                                <p
-                                    style="font-size: 13px; font-weight: 600; color: var(--macos-text-primary); margin: 0;">
-                                    Resultado Final</p>
-                                <p style="font-size: 11px; color: var(--macos-text-secondary); margin: 0;">Lucro Líquido
-                                </p>
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <p style="font-size: 13px; font-weight: 700; color: #10B981; margin: 0;"
-                                id="commModalNetResult">R$ 0,00</p>
-                            <p style="font-size: 10px; color: var(--macos-text-secondary); margin: 0;">Após taxas</p>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script para Modal de Comissões -->
-    <script>
-        function openCommissionModal(id) {
-            const rawData = JSON.parse(document.getElementById('opportunities-raw-data').textContent);
-            const op = rawData.find(o => String(o.id) === String(id));
-
-            if (!op) return;
-
-            // Formatter
-            const fmt = (v) => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-            // 1. Dados Básicos
-            document.getElementById('commModalSubtitle').innerText = op.titulo || 'Imóvel sem título';
-            document.getElementById('commModalLucro').innerText = fmt(op.lucro_estimado);
-
-            // 2. Cálculo da Taxa de Mineração (Estudo)
-            // Lógica: Se não tiver definido no objeto, assume 500. Se tiver, usa o do objeto.
-            const miningFee = 500.00; // Valor padrão fixo do sistema
-            document.getElementById('commModalMiningFee').innerText = fmt(miningFee);
-            document.getElementById('commModalMineradorName').innerText = op.autor || 'Sistema';
-
-            // 3. Cálculo da Comissão de Venda (6% do Valor de Venda)
-            const salesValue = op.valor_venda || 0;
-            const salesFee = salesValue * 0.06;
-            document.getElementById('commModalSalesFee').innerText = fmt(salesFee);
-
-            // 4. Resultado Final
-            document.getElementById('commModalNetResult').innerText = fmt(op.lucro_estimado);
-
-            // Show Modal
-            const modal = document.getElementById('commissionModal');
-            modal.classList.add('is-visible');
-        }
-
-        function closeCommissionModal() {
-            document.getElementById('commissionModal').classList.remove('is-visible');
-        }
-
-        // Close on click outside
-        document.getElementById('commissionModal').addEventListener('click', function (e) {
-            if (e.target === this) closeCommissionModal();
-        });
-    </script>
+    </main>
 </body>
 
 </html>

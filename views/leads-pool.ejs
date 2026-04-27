@@ -13,7 +13,7 @@
         <%- include('partials/macos-sidebar', { user: user }) %>
 
             <main class="macos-main-content">
-                <div class="animate-fade-in" style="padding-bottom: 40px; max-width: 1200px; margin: 0 auto;">
+                <div class="animate-fade-in macos-container" style="padding-bottom: 40px;">
 
                     <!-- Admin Dashboard (KPIs) -->
                     <% if (locals.isAdmin && locals.kpis) { %>
@@ -56,7 +56,7 @@
                         <% } %>
 
                             <!-- Header -->
-                            <div class="flex items-center justify-between mb-8">
+                            <div class="flex items-center justify-between mb-8 px-1">
                                 <div>
                                     <h1 class="text-3xl font-bold text-[var(--macos-text-primary)] mb-2">Novos Leads
                                     </h1>
@@ -261,34 +261,54 @@
                                             <!-- Perfil -->
                                             <td class="p-4">
                                                 <div class="flex flex-col gap-1">
-                                                    <span class="text-sm text-[var(--macos-text-primary)] capitalize">
-                                                        <i
-                                                            class="<%= lead.objetivo === 'investir' ? 'fa-solid fa-chart-line text-green-500' : 'fa-solid fa-house text-blue-500' %> mr-1"></i>
-                                                        <%= lead.objetivo %>
+                                                    <%
+                                                        const interesseLabel = {
+                                                            'leilao_imoveis': 'Leilão de Imóveis',
+                                                            'leilao_veiculos': 'Leilão de Veículos',
+                                                            'investimento': 'Investimento',
+                                                            'eventos': 'Eventos de Leilão',
+                                                            'licenciado': 'Ser Licenciado'
+                                                        }[lead.interesse] || lead.interesse || 'Não informado';
+
+                                                        const interesseIcon = {
+                                                            'leilao_imoveis': 'fa-solid fa-house text-blue-400',
+                                                            'leilao_veiculos': 'fa-solid fa-car text-yellow-400',
+                                                            'investimento': 'fa-solid fa-chart-line text-green-400',
+                                                            'eventos': 'fa-solid fa-calendar-star text-purple-400',
+                                                            'licenciado': 'fa-solid fa-id-badge text-orange-400'
+                                                        }[lead.interesse] || 'fa-solid fa-tag text-slate-400';
+
+                                                        const objetivoLabel = {
+                                                            'comprar': 'Quer Comprar',
+                                                            'investir': 'Quer Investir',
+                                                            'aprender': 'Quer Aprender',
+                                                            'nao_informado': 'Objetivo N/I'
+                                                        }[lead.objetivo] || lead.objetivo || 'N/I';
+                                                    %>
+                                                    <span class="text-sm text-[var(--macos-text-primary)]">
+                                                        <i class="<%= interesseIcon %> mr-1"></i>
+                                                        <%= interesseLabel %>
                                                     </span>
+                                                    <span class="text-xs text-slate-400">
+                                                        <i class="fa-solid fa-bullseye mr-1"></i>
+                                                        <%= objetivoLabel %>
+                                                    </span>
+                                                    <% if (lead.cidade) { %>
                                                     <span class="text-xs text-slate-500">
-                                                        <i
-                                                            class="<%= lead.experiencia === 'ja_arrematei' ? 'fa-solid fa-medal text-yellow-500' : 'fa-solid fa-graduation-cap' %> mr-1"></i>
-                                                        <%= lead.experiencia==='ja_arrematei' ? 'Já Arrematou'
-                                                            : '1ª Viagem' %>
+                                                        <i class="fa-solid fa-location-dot mr-1"></i>
+                                                        <%= lead.cidade %><%= lead.estado ? ' - ' + lead.estado : '' %>
                                                     </span>
-                                                    <span
-                                                        class="text-xs <%= lead.restricao_nome ? 'text-red-500' : 'text-green-500' %>">
-                                                        <i class="fa-solid fa-id-card mr-1"></i>
-                                                        <%= lead.restricao_nome ? 'Restrição Ativa' : 'Nome Limpo' %>
-                                                    </span>
+                                                    <% } %>
                                                 </div>
                                             </td>
 
                                             <!-- Capital -->
                                             <td class="p-4">
                                                 <p class="font-medium text-[var(--macos-text-primary)]">
-                                                    <%= (lead.capital_entrada || 0).toLocaleString('pt-BR', {
-                                                        style: 'currency' , currency: 'BRL' }) %>
+                                                    <%= ((lead.capital_entrada || lead.capital_disponivel || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) %>
                                                 </p>
-                                                <span
-                                                    class="text-xs px-2 py-0.5 rounded-full <%= lead.preferencia_pgto === 'vista' ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500' %>">
-                                                    <%= lead.preferencia_pgto==='vista' ? 'À Vista' : 'Financiado' %>
+                                                <span class="text-xs px-2 py-0.5 rounded-full <%= lead.objetivo === 'investir' ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500' %>">
+                                                    <%= lead.objetivo === 'investir' ? 'Investidor' : 'Comprador' %>
                                                 </span>
                                             </td>
 
@@ -748,16 +768,21 @@
                     }
 
                     // Auto-init
-                    document.addEventListener('DOMContentLoaded', () => {
+                    const initLeadsTabs = () => {
                         switchTab('leads');
-                    });
+                    };
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initLeadsTabs);
+                    } else {
+                        initLeadsTabs();
+                    }
                 </script>
 
                 </div>
-            </main>
 
             <script>
-                document.addEventListener('DOMContentLoaded', function () {
+                const initLeadsFilters = () => {
                     const stateFilter = document.getElementById('stateFilter');
                     const rows = document.querySelectorAll('.lead-row');
 
@@ -845,8 +870,15 @@
                             if (nameEl) nameEl.insertAdjacentElement('afterend', badge);
                         }
                     });
-                });
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initLeadsFilters);
+                } else {
+                    initLeadsFilters();
+                }
             </script>
+            </main>
 </body>
 
 </html>

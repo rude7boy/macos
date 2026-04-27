@@ -87,9 +87,9 @@
 
             /* Screen Only Styles */
             .page-container {
-                max-width: 1200px;
+                max-width: 1300px;
                 margin: 0 auto;
-                padding: 24px;
+                padding: 0;
             }
 
             /* UI STYLES (Screen) - DARK MODE COMPATIBLE */
@@ -513,7 +513,7 @@
             <!-- MAIN CONTENT WRAPPER -->
             <main class="macos-main-content">
                 <!-- INPUT SECTION (Visible on Screen) -->
-                <div class="page-container no-print">
+                <div class="page-container macos-container no-print">
 
                     <!-- Botões de Rascunho -->
                     <div
@@ -570,7 +570,7 @@
                                 <input type="text" id="inputEndereco" placeholder="Ex: Endereço Completo">
                             </div>
                             <div>
-                                <label>Número do Bem</label>
+                                <label>Número do Imóvel</label>
                                 <input type="text" id="inputBem" placeholder="Ex: 000000000000-0">
                             </div>
                             <div>
@@ -602,18 +602,6 @@
                                 <input type="text" id="inputVaga" placeholder="Ex: 00">
                             </div>
 
-                            <div>
-                                <label>Valor Avaliação (Caixa)</label>
-                                <input type="text" id="inputValorAvaliacao"
-                                    class="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 currency-input"
-                                    placeholder="Ex: R$ 0,00">
-                            </div>
-                            <div>
-                                <label>Condomínio (R$)</label>
-                                <input type="text" id="inputCondominio"
-                                    class="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 currency-input"
-                                    placeholder="Ex: R$ 0,00">
-                            </div>
                         </div>
 
                         <!-- Image Uploads -->
@@ -766,7 +754,7 @@
                             </div>
                         </div>
                     </div> <!-- End Company Info -->
-                </div>
+
 
                 <!-- Step 2: Financial Data (Import) -->
                 <div
@@ -794,11 +782,6 @@
                                         <% } %>
                         </select>
                     </div>
-
-                    <!-- Manual Inputs Removed -->
-
-
-
                 </div> <!-- Close Step 3 -->
 
                 <!-- PDF PREVIEW SECTION (Separated) -->
@@ -820,6 +803,7 @@
                         <!-- As 4 páginas do PDF serão exibidas aqui -->
                     </div>
                 </div>
+                </div> <!-- End page-container -->
 
                 <!-- PDF CONTENT (Visible on screen for preview, used for print) -->
                 <div id="pdf-content" class="font-sans text-black" style="display: block;">
@@ -858,7 +842,7 @@
                                     <!-- Badge Processo -->
                                     <div class="absolute top-6 right-6 bg-black text-white px-4 py-2 shadow-lg">
                                         <p class="text-[10px] uppercase tracking-widest font-bold mb-0.5 opacity-70">
-                                            Número do Bem</p>
+                                            Número do Imóvel</p>
                                         <p class="font-mono font-bold text-sm" id="pdfBem">00000.0000</p>
                                     </div>
                                 </div>
@@ -1293,7 +1277,7 @@
                             <div class="pdf-footer-page"></div>
                         </div>
                     </div>
-            </main>
+
 
             <!-- Libs -->
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -1343,7 +1327,7 @@
                 let currentCalcData = {};
 
                 // Sync Inputs to PDF Text with Logic to Hide Empty Fields
-                const fields = ['Cliente', 'Nome', 'Bem', 'Licitacao', 'Endereco', 'Apto', 'Metragem', 'Quartos', 'Banheiros', 'Vaga', 'Condominio', 'Instagram', 'Creci', 'Footer'];
+                const fields = ['Cliente', 'Nome', 'Bem', 'Licitacao', 'Endereco', 'Apto', 'Metragem', 'Quartos', 'Banheiros', 'Vaga', 'Condominio', 'Instagram', 'Creci', 'Footer', 'ValorAvaliacao', 'ValorArremate', 'ValorVenda'];
 
 
                 // Fields that trigger card hiding if empty
@@ -1390,7 +1374,11 @@
 
                             // 1. Update Text with Suffixes and Capitalization logic
                             // Special handling for 'Nome' which updates Title and Subtitle areas if needed
-                            const targetId = 'pdf' + (id === 'Nome' ? 'NomeImovel' : id);
+                            const idMap = {
+                                'Nome': 'NomeImovel',
+                                'ValorArremate': 'Lance'
+                            };
+                            const targetId = 'pdf' + (idMap[id] || id);
                             const targets = document.querySelectorAll(`[id="${targetId}"]`);
 
                             targets.forEach(target => {
@@ -1434,6 +1422,13 @@
 
                             // 3. Update Visibility for Optional Cards (All instances)
                             updateFieldVisibility(id, val);
+
+                            // 4. Trigger ROI Scenarios update if financial field
+                            if (['Condominio', 'ValorAvaliacao', 'ValorArremate', 'ValorVenda'].includes(id)) {
+                                if (typeof updateManualFinancialData === 'function') {
+                                    updateManualFinancialData();
+                                }
+                            }
                         });
                     }
                 });
@@ -1486,100 +1481,114 @@
 
                 // Image Preview Handler
                 function previewUpload(input, previewId, pdfTargetId) {
-                    if (input.files && input.files[0]) {
-                        // Use createImageBitmap to enforce EXIF orientation baking
-                        // This is supported in modern browsers and correctly handles "imageOrientation: from-image" default
-                        createImageBitmap(input.files[0])
-                            .then(bitmap => {
-                                const canvas = document.createElement('canvas');
-                                canvas.width = bitmap.width;
-                                canvas.height = bitmap.height;
-                                const ctx = canvas.getContext('2d');
+                    if (!input.files || !input.files[0]) return;
 
-                                // Draw the pre-orientated bitmap
-                                ctx.drawImage(bitmap, 0, 0);
+                    const file = input.files[0];
+                    const MAX_DIM = 1600;   // Max width or height in px
+                    const QUALITY = 0.85;   // JPEG quality (0-1)
 
-                                const cleanDataUrl = canvas.toDataURL('image/png');
+                    // Helper: apply compressed data URL to targets
+                    const applyImage = (dataUrl) => {
+                        // CRITICAL: Update global state if this is the footer logo
+                        if (input.id === 'fileLogoFooter' || input.id === 'fileLogoWatermark') {
+                            currentLogoBase64 = dataUrl;
+                        }
 
-                                // CRITICAL: Update global state if this is the footer logo
-                                if (input.id === 'fileLogoFooter') {
-                                    currentLogoBase64 = cleanDataUrl;
-                                }
+                        const preview = document.getElementById(previewId);
+                        if (preview) {
+                            if (preview.tagName === 'IMG') preview.src = dataUrl;
+                            else preview.style.backgroundImage = `url(${dataUrl})`;
+                            preview.classList.remove('hidden');
+                        }
 
-                                const preview = document.getElementById(previewId);
-                                if (preview.tagName === 'IMG') {
-                                    preview.src = cleanDataUrl;
+                        if (pdfTargetId) {
+                            let elements = document.querySelectorAll(`[id="${pdfTargetId}"]`);
+                            if (elements.length === 0) elements = document.querySelectorAll(`.${pdfTargetId}`);
+                            elements.forEach(el => {
+                                if (el.tagName === 'IMG') {
+                                    el.src = dataUrl;
+                                    el.style.transform = 'none';
+                                    el.style.rotate = '0deg';
+                                    el.style.display = 'block';
                                 } else {
-                                    preview.style.backgroundImage = `url(${cleanDataUrl})`;
+                                    el.style.backgroundImage = `url(${dataUrl})`;
+                                    el.style.transform = 'none';
                                 }
-                                preview.classList.remove('hidden');
-
-                                if (pdfTargetId) {
-                                    let elements = document.querySelectorAll(`[id="${pdfTargetId}"]`);
-                                    if (elements.length === 0) {
-                                        // Fallback to class selector
-                                        elements = document.querySelectorAll(`.${pdfTargetId}`);
-                                    }
-                                    elements.forEach(el => {
-                                        if (el.tagName === 'IMG') {
-                                            el.src = cleanDataUrl;
-                                            el.style.transform = 'none';
-                                            el.style.rotate = '0deg';
-                                        } else {
-                                            el.style.backgroundImage = `url(${cleanDataUrl})`;
-                                            el.style.transform = 'none';
-                                        }
-                                        el.classList.remove('hidden');
-                                        el.style.display = 'block'; // Force visibility
-                                    });
-                                }
-
-                                // SHOW DELETE BUTTON
-                                if (input.parentElement) {
-                                    const btn = input.parentElement.querySelector('.remove-image-btn');
-                                    if (btn) btn.classList.remove('hidden');
-                                }
-                            })
-                            .catch(err => {
-                                console.error("Bitmap Error, fallback to FileReader:", err);
-                                const img = new Image();
-                                img.onload = function () {
-                                    const canvas = document.createElement('canvas');
-                                    canvas.width = img.width;
-                                    canvas.height = img.height;
-                                    const ctx = canvas.getContext('2d');
-                                    ctx.drawImage(img, 0, 0);
-                                    const cleanDataUrl = canvas.toDataURL('image/png');
-
-                                    // CRITICAL: Update global state
-                                    if (input.id === 'fileLogoWatermark') {
-                                        currentLogoBase64 = cleanDataUrl;
-                                    }
-
-                                    const preview = document.getElementById(previewId);
-                                    if (preview.tagName === 'IMG') preview.src = cleanDataUrl;
-                                    else preview.style.backgroundImage = `url(${cleanDataUrl})`;
-                                    preview.classList.remove('hidden');
-
-                                    if (pdfTargetId) {
-                                        let elements = document.querySelectorAll(`[id="${pdfTargetId}"]`);
-                                        if (elements.length === 0) {
-                                            elements = document.querySelectorAll(`.${pdfTargetId}`);
-                                        }
-                                        elements.forEach(el => {
-                                            if (el.tagName === 'IMG') {
-                                                el.src = cleanDataUrl;
-                                                el.style.display = 'block';
-                                            }
-                                            else el.style.backgroundImage = `url(${cleanDataUrl})`;
-
-                                            el.classList.remove('hidden');
-                                        });
-                                    }
-                                };
-                                img.src = URL.createObjectURL(input.files[0]);
+                                el.classList.remove('hidden');
                             });
+                        }
+
+                        // Show delete button
+                        const dropzone = input.closest('[id^="dropzone_"]') || input.parentElement;
+                        if (dropzone) {
+                            const btn = dropzone.querySelector('.remove-image-btn');
+                            if (btn) btn.classList.remove('hidden');
+                        }
+                    };
+
+                    // Resize + compress via canvas
+                    const compressImage = (bitmap) => {
+                        let { width, height } = bitmap;
+
+                        // Scale down if needed
+                        if (width > MAX_DIM || height > MAX_DIM) {
+                            const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+                            width = Math.round(width * ratio);
+                            height = Math.round(height * ratio);
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(bitmap, 0, 0, width, height);
+
+                        // Use JPEG for photos (much smaller than PNG)
+                        return canvas.toDataURL('image/jpeg', QUALITY);
+                    };
+
+                    // Use createObjectURL for instant preview, then compress in background
+                    const objectUrl = URL.createObjectURL(file);
+
+                    // Show a fast temp preview immediately (no lag)
+                    const preview = document.getElementById(previewId);
+                    if (preview) {
+                        if (preview.tagName === 'IMG') preview.src = objectUrl;
+                        else preview.style.backgroundImage = `url(${objectUrl})`;
+                        preview.classList.remove('hidden');
                     }
+
+                    // Then compress in background and swap to compressed version
+                    createImageBitmap(file)
+                        .then(bitmap => {
+                            const dataUrl = compressImage(bitmap);
+                            bitmap.close(); // Free memory
+                            URL.revokeObjectURL(objectUrl); // Cleanup temp URL
+                            applyImage(dataUrl);
+                        })
+                        .catch(() => {
+                            // Fallback: use FileReader if createImageBitmap fails (older Safari)
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const img = new Image();
+                                img.onload = () => {
+                                    let { width, height } = img;
+                                    if (width > MAX_DIM || height > MAX_DIM) {
+                                        const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+                                        width = Math.round(width * ratio);
+                                        height = Math.round(height * ratio);
+                                    }
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = width;
+                                    canvas.height = height;
+                                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                                    URL.revokeObjectURL(objectUrl);
+                                    applyImage(canvas.toDataURL('image/jpeg', QUALITY));
+                                };
+                                img.src = e.target.result;
+                            };
+                            reader.readAsDataURL(file);
+                        });
                 }
 
                 // --- Company Profile Management (LocalStorage) ---
@@ -1833,7 +1842,11 @@
                     }
                 }
 
-                document.addEventListener('DOMContentLoaded', refreshCompanySelect);
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', refreshCompanySelect);
+                } else {
+                    refreshCompanySelect();
+                }
 
                 // Initialize PDF Preview
                 // Initialize PDF Preview (Global)
@@ -1846,11 +1859,24 @@
                     // Get all PDF sheets (pages)
                     const pages = pdfContent.querySelectorAll('.pdf-sheet');
 
+                    if (pages.length === 0) {
+                        console.warn('⚠️ No pages found to preview yet. Will retry...');
+                        // If it's a SPA navigation, sometimes the DOM hasn't settled.
+                        // Force a check on the direct DOM if needed.
+                        const directPdfContent = document.getElementById('pdf-content');
+                        if (directPdfContent && directPdfContent.querySelectorAll('.pdf-sheet').length > 0) {
+                             console.log('✅ Found pages on second look.');
+                        } else {
+                             return false;
+                        }
+                    }
+
                     // Clear preview container
                     previewContainer.innerHTML = '';
 
                     // Clone each page into the preview
                     pages.forEach((page, index) => {
+                        console.log(`Cloning page ${index + 1}...`);
                         const pageWrapper = document.createElement('div');
                         pageWrapper.className = 'pdf-preview-page';
                         // Fix for layout: Scale wrapper to match the scaled content size 
@@ -1900,37 +1926,89 @@
                         pageWrapper.appendChild(clonedPage);
                         previewContainer.appendChild(pageWrapper);
                     });
+
+                    console.log('✅ PDF Preview Initialized with', pages.length, 'pages.');
+                    return true;
                 };
 
+                // RE-IMPLEMENT MISSING FUNCTION
+                function updateManualFinancialData() {
+                    console.log('🔄 updateManualFinancialData called');
+                    const getVal = (id) => document.getElementById(id)?.value || '0';
+                    
+                    const data = {
+                        valorArrematado: window.num(getVal('inputValorArremate')),
+                        valorAvaliacao: window.num(getVal('inputValorAvaliacao')),
+                        valorVendaFinal: window.num(getVal('inputValorVenda')),
+                        condominioMensal: window.num(getVal('inputCondominio')),
+                        iptuMensal: window.num(getVal('inputIptu'))
+                    };
+
+                    // Only merge non-zero values if we already have calculation data
+                    // This prevents empty UI fields from wiping out loaded DB data
+                    if (currentCalcData && Object.keys(currentCalcData).length > 0) {
+                        for (const key in data) {
+                            if (data[key] > 0) {
+                                currentCalcData[key] = data[key];
+                            }
+                        }
+                    } else {
+                        currentCalcData = { ...data };
+                    }
+                    
+                    renderScenarioResults(currentCalcData);
+                }
+                window.updateManualFinancialData = updateManualFinancialData;
+
                 // Initialize preview on load and when data changes
-                document.addEventListener('DOMContentLoaded', () => {
-                    // Initialize financial data with default values
-                    setTimeout(() => {
-                        updateManualFinancialData();
-                        initializePDFPreview();
-
-                        // Force Default Logo through Canvas Cleaner to fix iOS Orientation/Tiling
-                        // Only do this if no custom logo is present (which would be handled by other logic ideally, but here we enforce default)
-                        // If there IS a custom logo saved in profile, loadCompanyProfile will overwrite this shortly after via refreshCompanySelect->loadCompany.
-
-                        // Fetch default logo to process it
-                        fetch('/images/logo-fortal.png')
-                            .then(res => res.blob())
-                            .then(blob => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                    // Use the cleaner function!
-                                    if (typeof applyWatermarkFromBase64 === 'function') {
-                                        console.log("Applying Default Logo via Canvas Cleaner...");
-                                        applyWatermarkFromBase64(reader.result);
+                const initPage = () => {
+                    console.log('🚀 Initializing Da Vinci Page Logic...');
+                    
+                    let attempts = 0;
+                    const maxAttempts = 15; // Increased attempts
+                    
+                    const tryInit = () => {
+                        attempts++;
+                        
+                        if (typeof updateManualFinancialData === 'function') {
+                            updateManualFinancialData();
+                        }
+                        
+                        const success = typeof initializePDFPreview === 'function' && initializePDFPreview();
+                        
+                        if (!success && attempts < maxAttempts) {
+                            console.log(`⏳ Preview not ready, retry ${attempts}/${maxAttempts}...`);
+                            setTimeout(tryInit, 200); // More frequent retries
+                        } else {
+                            if (success) {
+                                console.log('✨ Preview successfully initialized after SPA transition.');
+                            }
+                            // Fetch default logo to process it
+                            fetch('/images/logo-fortal.png')
+                                .then(res => res.blob())
+                                .then(blob => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                        if (typeof applyWatermarkFromBase64 === 'function') {
+                                            console.log("Applying Default Logo via Canvas Cleaner...");
+                                            applyWatermarkFromBase64(reader.result);
+                                        }
                                     }
-                                }
-                                reader.readAsDataURL(blob);
-                            })
-                            .catch(err => console.error("Error loading default logo for watermark:", err));
+                                    reader.readAsDataURL(blob);
+                                })
+                                .catch(err => console.error("Error loading default logo for watermark:", err));
+                        }
+                    };
 
-                    }, 500);
-                });
+                    // Initial delay to let the PJAX DOM settle
+                    setTimeout(tryInit, 300);
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initPage);
+                } else {
+                    initPage();
+                }
 
 
 
@@ -1967,156 +2045,156 @@
                 // GLOBAL STATE (Moved to top)
                 // let currentCalcData = {};
 
-                // HELPER: Normalize Data Keys (handle case variations)
-                const normalizeKeys = (data) => {
+
+
+                // ===== PDF GENERATION & PREVIEW LOGIC =====
+
+                const normalizeKeys = (obj) => {
                     const normalized = {};
-                    if (!data || typeof data !== 'object') return {};
-
-                    Object.keys(data).forEach(key => {
-                        const lowerKey = key.charAt(0).toLowerCase() + key.slice(1);
-                        normalized[lowerKey] = data[key];
-                        normalized[key] = data[key]; // Keep original
-                    });
-
-                    // Extended Mappings for Robustness
-                    const mappings = {
-                        'lance': 'valorArrematado',
-                        'valorLance': 'valorArrematado',
-                        'arremate': 'valorArrematado',
-                        'valorArremate': 'valorArrematado',
-                        'avaliacao': 'valorAvaliacao',
-                        'valorAvaliacao': 'valorAvaliacao',
-                        'condominio': 'condominioMensal',
-                        'venda': 'valorVendaFinal',
-                        'valorVenda': 'valorVendaFinal',
-                        'iptu': 'iptuMensal'
+                    
+                    // Recursive helper to find values by fuzzy keys
+                    const findFuzzy = (target, patterns) => {
+                        if (!target || typeof target !== 'object') return undefined;
+                        
+                        // 1. Try direct match in current level
+                        for (const key in target) {
+                            const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            if (patterns.some(p => cleanKey.includes(p) || p.includes(cleanKey))) {
+                                if (target[key] !== undefined && target[key] !== '' && target[key] !== 0) return target[key];
+                            }
+                        }
+                        
+                        // 2. Try nested objects
+                        for (const key in target) {
+                            if (typeof target[key] === 'object' && target[key] !== null) {
+                                const found = findFuzzy(target[key], patterns);
+                                if (found !== undefined) return found;
+                            }
+                        }
+                        return undefined;
                     };
 
-                    for (const [alias, target] of Object.entries(mappings)) {
-                        if ((normalized[target] === undefined || normalized[target] === 0 || normalized[target] === '') &&
-                            (normalized[alias] !== undefined && normalized[alias] !== '')) {
-                            normalized[target] = normalized[alias];
+                    // Define Fuzzy Patterns for each target
+                    const fuzzyMappings = {
+                        'valorVendaFinal': ['venda', 'precodevenda', 'valordevenda', 'vendatotal'],
+                        'iptuMensal': ['iptu', 'iptumensal'],
+                        'condominioMensal': ['condominio', 'condominiomensal'],
+                        'valorArrematado': ['arremate', 'lance', 'valorarrematado', 'vlr_arremate', 'vlr_lance', 'valor_lance'],
+                        'valorAvaliacao': ['avaliacao', 'avaliacaocaixa', 'mercado', 'vlr_avaliacao', 'valor_avaliacao']
+                    };
+
+                    // Build the normalized object
+                    for (const [target, patterns] of Object.entries(fuzzyMappings)) {
+                        const val = findFuzzy(obj, patterns);
+                        if (val !== undefined) {
+                            console.log(`🔍 Found Fuzzy Value for ${target}:`, val);
+                            normalized[target] = val;
                         }
                     }
 
-                    return normalized;
+                    // Keep any original top-level keys as fallback
+                    return { ...obj, ...normalized };
                 };
 
                 // LOAD DATA FROM API
                 async function loadCalculationData(select) {
                     const id = select.value;
                     const container = document.getElementById('pdfViabilityContent');
+                    const screenContainer = document.getElementById('screenViabilityPreview');
+                    const emptyState = document.getElementById('emptyViabilityState');
 
                     console.log('🔄 loadCalculationData chamado com ID:', id);
                     if (!id) {
-                        console.warn('⚠️ Nenhum ID selecionado');
+                        if (screenContainer) screenContainer.classList.add('hidden');
+                        if (emptyState) emptyState.classList.remove('hidden');
                         return;
                     }
 
                     // Loading State
                     if (container) {
-                        container.innerHTML = `
-                            <div class="h-64 flex flex-col items-center justify-center text-gray-400">
-                                <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i>
-                                <p>Carregando dados...</p>
-                            </div>
-                        `;
+                        container.innerHTML = `<div class="h-64 flex flex-col items-center justify-center text-gray-400"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><p>Carregando dados...</p></div>`;
                     }
 
                     try {
-                        console.log('📡 Fazendo fetch para /api/saved-calculations...');
                         const response = await fetch('/api/saved-calculations');
-                        if (!response.ok) {
-                            console.error('❌ API retornou erro:', response.status);
-                            throw new Error("Erro na API: " + response.status);
-                        }
+                        if (!response.ok) throw new Error("Erro na API: " + response.status);
 
                         const allCalcs = await response.json();
-                        console.log('✅ API retornou', allCalcs.length, 'cálculos');
-
                         const targetCalc = allCalcs.find(c => c.id == id);
 
                         if (!targetCalc) {
-                            console.error('❌ Cálculo ID', id, 'não encontrado');
                             alert("Cálculo não encontrado.");
                             return;
                         }
 
-                        console.log('✅ Cálculo encontrado:', targetCalc.name);
-                        console.log('📦 Dados brutos:', targetCalc.data);
-
-                        // Parse Data (Robust)
                         let rawData = targetCalc.data;
-                        try {
-                            if (typeof rawData === 'string') {
-                                rawData = JSON.parse(rawData);
-                            }
-                            // Double parse check just in case it was double stringified
-                            if (typeof rawData === 'string') {
-                                rawData = JSON.parse(rawData);
-                            }
-                        } catch (e) {
-                            console.error("Parse Error:", e);
-                            // Verify if it's at least an object, if not, create empty
-                            if (typeof rawData !== 'object') rawData = {};
+                        
+                        // Always parse if string
+                        if (typeof rawData === 'string') {
+                            try { rawData = JSON.parse(rawData); } catch(e) { rawData = {}; }
+                        }
+                        
+                        // Double-parse check (sometimes data is double-serialized)
+                        if (typeof rawData === 'string') {
+                            try { rawData = JSON.parse(rawData); } catch(e) { rawData = {}; }
                         }
 
-                        // Final safety check
-                        if (!rawData || typeof rawData !== 'object') {
-                            console.error("Data is not an object:", rawData);
-                            rawData = {};
-                        }
-
-                        // Normalize Data (Source of Truth)
+                        console.group('📦 Raw Calculation Data Loaded');
+                        console.log('valorArrematado:', rawData.valorArrematado);
+                        console.log('valorAvaliacao:', rawData.valorAvaliacao);
+                        console.log('valorVendaFinal:', rawData.valorVendaFinal);
+                        console.log('condominioMensal:', rawData.condominioMensal);
+                        console.log('iptuMensal:', rawData.iptuMensal);
+                        console.log('All keys:', Object.keys(rawData));
+                        console.groupEnd();
+                        
                         currentCalcData = normalizeKeys(rawData || {});
-                        console.log("Calculation Data Loaded:", currentCalcData);
 
-                        // 1. Update Manual Inputs (Visual Only - Do NOT trigger events)
-                        // 1. Update Manual Inputs (AND DISPATCH EVENTS TO WAKE UP UI)
-                        const setInput = (id, val) => {
-                            const el = document.getElementById(id);
-                            if (el) {
-                                el.value = window.fmt(val);
-                                el.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
+                        console.group('✅ Normalized Data');
+                        console.log('valorArrematado:', currentCalcData.valorArrematado);
+                        console.log('valorAvaliacao:', currentCalcData.valorAvaliacao);
+                        console.log('valorVendaFinal:', currentCalcData.valorVendaFinal);
+                        console.groupEnd();
+                        
+                        // Update UI Reference Fields (read-only display)
+                        const safeNum = (v) => parseFloat(v) || 0;
+                        const setRefField = (elemId, val) => {
+                            const el = document.getElementById(elemId);
+                            if (el) el.value = window.fmt(safeNum(val));
                         };
 
-                        setInput('inputCondominio', window.num(currentCalcData.condominioMensal));
-                        setInput('inputValorAvaliacao', window.num(currentCalcData.valorAvaliacao));
-                        setInput('inputValorArremate', window.num(currentCalcData.valorArrematado));
+                        setRefField('inputCondominio', currentCalcData.condominioMensal);
+                        setRefField('inputIptu', currentCalcData.iptuMensal);
+                        setRefField('inputValorAvaliacao', currentCalcData.valorAvaliacao);
+                        setRefField('inputValorArremate', currentCalcData.valorArrematado);
+                        setRefField('inputValorVenda', currentCalcData.valorVendaFinal);
 
-                        // 2. Render Calculation Results
-                        if (typeof renderScenarioResults === 'function') renderScenarioResults(currentCalcData);
-
-                        // Success Feedback
-                        if (typeof mostrarNotificacao === 'function') mostrarNotificacao("Dados carregados: " + (targetCalc.name || "Cálculo"), "success");
+                        renderScenarioResults(currentCalcData);
+                        
+                        if (typeof mostrarNotificacao === 'function') mostrarNotificacao("Cálculo carregado com sucesso!", "success");
 
                     } catch (error) {
-                        console.error("Load Error:", error);
-                        alert("Erro ao carregar: " + error.message);
-                        if (container) container.innerHTML = `<p class="text-red-500 text-center p-4">Erro ao carregar: ${error.message}</p>`;
+                        console.error("❌ Load Error:", error);
+                        alert("Erro ao carregar cálculo: " + error.message);
                     }
                 }
 
-                // RENDER PDF CONTENT
+                // RENDER RESULTS (PDF and Screen)
                 function renderScenarioResults(dataOverride) {
-                    const container = document.getElementById('pdfViabilityContent');
+                    console.log('🎨 renderScenarioResults called', dataOverride ? '(with override)' : '(with global state)');
+                    const pdfSource = document.getElementById('pdf-content');
+                    if (!pdfSource) return;
+
+                    const container = pdfSource.querySelector('#pdfViabilityContent');
                     const data = dataOverride || currentCalcData;
 
-                    console.log('🎨 renderScenarioResults running. Data keys:', data ? Object.keys(data).length : 0);
-
                     if (!data || Object.keys(data).length === 0) {
-                        if (container) container.innerHTML = '<p class="text-center text-gray-400 p-8">Dados inválidos ou vazios.</p>';
+                        console.warn('⚠️ No data to render scenario results');
                         return;
                     }
 
-                    if (!container) return;
-
                     try {
-                        // --- 1. CALCULATIONS ---
                         const getNum = (v) => window.num(v);
-
-                        // Helper for deep search locally
                         const findDeepLocal = (obj, key) => {
                             if (!obj || typeof obj !== 'object') return null;
                             if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
@@ -2128,86 +2206,38 @@
                             }
                             return null;
                         };
-                        const getAnyDeepLocal = (...keys) => {
-                            for (const k of keys) {
-                                const val = findDeepLocal(data, k);
-                                if (val) return val;
-                            }
-                            return null;
-                        };
 
-                        // Acquisition Strings
                         const vlrArremate = getNum(data.valorArrematado);
                         const vlrAvaliacao = getNum(data.valorAvaliacao);
-
-                        // Expenses
                         const leiloeiro = (String(data.incluirLeiloeiro) === 'false') ? 0 : vlrArremate * 0.05;
                         const itbiPct = getNum(data.itbi) > 0 ? getNum(data.itbi) / 100 : 0.03;
-
-                        // Try to use explicit saved ITBI value first (for legacy compatibility)
-                        let itbi = 0;
-                        const savedItbi = getAnyDeep ? getAnyDeep('valorITBI', 'itbi_value') : null;
-
-                        // Force Recalculation (Ignore stale saved values)
-                        const itbiBaseRaw = getAnyDeepLocal('itbiBase', 'itbi_base', 'base_itbi');
-
-                        // Determine Base ITBI
-                        let baseMode = 'avaliacao'; // Default
-                        if (itbiBaseRaw && typeof itbiBaseRaw === 'string') {
-                            const s = itbiBaseRaw.toLowerCase().trim();
-                            if (s === 'arremate' || s === 'lance') baseMode = 'arremate';
-                        }
-                        // Safety: If Avaliacao is 0/missing, use Arremate
-                        if (vlrAvaliacao <= 0) baseMode = 'arremate';
-
-                        const baseItbi = (baseMode === 'avaliacao') ? vlrAvaliacao : vlrArremate;
-                        itbi = baseItbi * itbiPct;
+                        
+                        const itbiBaseRaw = findDeepLocal(data, 'itbiBase') || 'avaliacao';
+                        const baseItbi = (itbiBaseRaw === 'arremate' || vlrAvaliacao <= 0) ? vlrArremate : vlrAvaliacao;
+                        const itbi = baseItbi * itbiPct;
+                        
                         const cartorio = getNum(data.custosCartorarios);
                         const reforma = getNum(data.reforma);
                         const debitos = getNum(data.debitosPendentes);
                         const desocupacao = getNum(data.custoDesocupacao);
                         const outros = getNum(data.custosAdicionais);
-                        const seguro = vlrArremate > 0 ? 190 : 0; // Only apply if valid property
-
-                        // Assessoria Logic (Default 0 if no value)
+                        const seguro = vlrArremate > 0 ? 190 : 0;
+                        
                         let assessoria = 0;
                         if (vlrArremate > 0) {
-                            // New Standard: 7k up to 140k, then 5%
                             const stdThresh = 140000;
                             const stdFee = 7000;
                             const stdPct = 0.05;
-
-                            if (data.assessoriaThreshold !== undefined) {
-                                // Custom Logic from Saved Calc
-                                const thresh = getNum(data.assessoriaThreshold) || stdThresh;
-                                const feeLow = getNum(data.assessoriaFeeBelow) || stdFee;
-                                const feeHighPct = (getNum(data.assessoriaFeeAbovePercent) || 5) / 100;
-                                assessoria = vlrArremate <= thresh ? feeLow : vlrArremate * feeHighPct;
-                            } else if (data.valorAssessoria && getNum(data.valorAssessoria) > 0) {
-                                // Legacy fixed value
-                                assessoria = getNum(data.valorAssessoria);
-                            } else {
-                                // Standard Default
-                                assessoria = vlrArremate <= stdThresh ? stdFee : vlrArremate * stdPct;
-                            }
+                            assessoria = vlrArremate <= stdThresh ? stdFee : vlrArremate * stdPct;
                         }
 
-                        // Operational
                         const cond = getNum(data.condominioMensal);
                         const iptu = getNum(data.iptuMensal);
                         const custoMensal = cond + iptu;
 
-                        // Bases
                         const investTotalBasico = vlrArremate + leiloeiro + itbi + cartorio + reforma + debitos + outros;
                         const vendaBase = getNum(data.valorVendaFinal) > 0 ? getNum(data.valorVendaFinal) : vlrAvaliacao;
 
-                        // Details Base (12 Months)
-                        const op12 = custoMensal * 12;
-                        const invest12 = investTotalBasico + op12 + desocupacao + seguro + assessoria;
-                        const bruto12 = vendaBase - (vendaBase * 0.06) - invest12;
-                        const imposto12 = bruto12 > 0 ? bruto12 * 0.15 : 0;
-
-                        // --- 2. HTML GENERATION ---
                         const scenarios = [
                             { m: 4, label: 'Venda Rápida' },
                             { m: 8, label: 'Venda Média' },
@@ -2216,17 +2246,10 @@
                         ];
 
                         let scenariosHTML = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">';
-
                         scenarios.forEach(s => {
                             const opCost = custoMensal * s.m;
                             const totalInvest = investTotalBasico + opCost + desocupacao + seguro + assessoria;
-
-                            let vendaCenario = vendaBase;
-                            // Use Long Term value if > 12 months
-                            if (s.m >= 12 && getNum(data.valorVendaLongo) > 0) {
-                                vendaCenario = getNum(data.valorVendaLongo);
-                            }
-
+                            let vendaCenario = (s.m >= 12 && getNum(data.valorVendaLongo) > 0) ? getNum(data.valorVendaLongo) : vendaBase;
                             const corretagem = vendaCenario * 0.06;
                             const bruto = vendaCenario - corretagem - totalInvest;
                             const imposto = bruto > 0 ? bruto * 0.15 : 0;
@@ -2238,519 +2261,135 @@
                             const borderColor = isPositive ? 'rgba(52, 199, 89, 0.2)' : 'rgba(255, 59, 48, 0.2)';
 
                             scenariosHTML += `
-                                <div style="background: #fff; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; border: 1px solid ${borderColor}; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                <div style="background: #fff; border-radius: 12px; padding: 20px; position: relative; border: 1px solid ${borderColor}; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                                     <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: ${color};"></div>
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px;">${s.label}</span>
-                                        <div style="display: flex; gap: 6px;">
-                                            <span style="background: #f3f4f6; padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #374151;">${s.m} Meses</span>
-                                        </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                                        <span style="font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase;">${s.label}</span>
+                                        <span style="background: #e5e7eb; color: #374151; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;">${s.m} Meses</span>
                                     </div>
-                                    <div style="margin-bottom: 12px;">
-                                        <p style="font-size: 10px; color: #6b7280; margin-bottom: 1px;">Lucro Líquido</p>
-                                        <h3 style="font-size: 22px; font-weight: 800; color: ${color}; letter-spacing: -0.5px; margin: 0;">${window.fmt(liq)}</h3>
-                                    </div>
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                                        <div>
-                                            <p style="font-size: 9px; color: #6b7280; margin-bottom: 1px;">ROI</p>
-                                            <p style="font-size: 11px; font-weight: 700; color: ${color}; margin: 0;">${roi.toFixed(2)}%</p>
-                                        </div>
-                                        <div style="text-align: right;">
-                                             <p style="font-size: 9px; color: #6b7280; margin-bottom: 1px;">Investimento</p>
-                                             <p style="font-size: 11px; font-weight: 600; color: #111827; margin: 0;">${window.fmt(totalInvest)}</p>
-                                        </div>
+                                    <h3 style="font-size: 22px; font-weight: 800; color: ${color}; margin: 0;">${window.fmt(liq)}</h3>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 10px;">
+                                        <span style="color: #4b5563;">ROI: <b style="color: ${color}">${roi.toFixed(1)}%</b></span>
+                                        <span style="color: #4b5563;">Invest: <b>${window.fmt(totalInvest)}</b></span>
                                     </div>
                                 </div>
                             `;
                         });
                         scenariosHTML += '</div>';
 
-                        const detailsHTML = `
-                            <div style="margin-top: 20px; padding-top: 20px; border-top: 2px dashed #e5e7eb;">
-                                <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Detalhamento (Base 12 Meses)</h3>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-                                    <div>
-                                        <h4 style="font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 8px;">Aquisição & Custos</h4>
-                                        
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Valor Arremate</span>
-                                            <span class="font-bold text-gray-900">${window.fmt(vlrArremate)}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Leiloeiro (5%)</span>
-                                            <span class="font-bold text-gray-900">${window.fmt(leiloeiro)}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Assessoria</span>
-                                            <span class="font-bold text-gray-900">${window.fmt(assessoria)}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Reforma/Débitos</span>
-                                            <span class="font-bold text-gray-900">${window.fmt(reforma + debitos + desocupacao)}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Impostos (ITBI/Cart.)</span>
-                                            <span class="font-bold text-gray-900">${window.fmt(itbi + cartorio)}</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 style="font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 8px;">Venda & Resultado</h4>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Valor Venda</span>
-                                            <span class="font-bold text-green-600">${window.fmt(vendaBase)}</span>
-                                        </div>
-                                         <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Custos Mensais (12x)</span>
-                                            <span class="font-bold text-red-500">-${window.fmt(op12)}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-                                            <span class="text-gray-500">Imposto Renda (15%)</span>
-                                            <span class="font-bold text-red-500">-${window.fmt(imposto12)}</span>
-                                        </div>
-                                        <div style="border-top: 1px solid #e5e7eb; margin-top: 8px; padding-top: 4px; display: flex; justify-content: space-between; font-size: 12px;">
-                                            <span class="font-bold text-gray-900">Resultado Líquido</span>
-                                            <span class="font-bold text-green-600">${window.fmt(bruto12 - imposto12)}</span>
-                                        </div>
-                                    </div>
+                        // 1. Build Acquisition Breakdown Summary
+                        const acqSummaryHTML = `
+                        <div style="margin-top: 25px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; font-family: 'Inter', sans-serif; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 10px;">
+                                <h5 style="margin: 0; font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase;">Investimento Inicial (Aquisição)</h5>
+                                <span style="font-size: 12px; font-weight: 800; color: #1e293b;">Total: ${window.fmt(investTotalBasico + assessoria + desocupacao + seguro)}</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 10px;">
+                                <div>
+                                    <p style="margin: 0; color: #64748b; margin-bottom: 2px;">Arremate:</p>
+                                    <p style="margin: 0; font-weight: 700; color: #1e293b;">${window.fmt(vlrArremate)}</p>
+                                </div>
+                                <div>
+                                    <p style="margin: 0; color: #64748b; margin-bottom: 2px;">Imp./Reg.:</p>
+                                    <p style="margin: 0; font-weight: 700; color: #1e293b;">${window.fmt(itbi + cartorio)}</p>
+                                </div>
+                                <div>
+                                    <p style="margin: 0; color: #64748b; margin-bottom: 2px;">Asses./Desoc.:</p>
+                                    <p style="margin: 0; font-weight: 700; color: #1e293b;">${window.fmt(assessoria + desocupacao)}</p>
+                                </div>
+                                <div>
+                                    <p style="margin: 0; color: #64748b; margin-bottom: 2px;">Reforma/Outros:</p>
+                                    <p style="margin: 0; font-weight: 700; color: #1e293b;">${window.fmt(reforma + outros)}</p>
                                 </div>
                             </div>
-                        `;
+                        </div>`;
 
-                        container.innerHTML = scenariosHTML + detailsHTML;
+                        // 2. Build Comparative Table for Scenarios
+                        let tableHTML = `
+                        <div style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; font-family: 'Inter', sans-serif;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left;">
+                                <thead style="background: #111827; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    <tr>
+                                        <th style="padding: 12px 15px; font-weight: 800; border-right: 1px solid #374151;">Resumo Comparativo</th>
+                                        ${scenarios.map(s => `<th style="padding: 12px 15px; text-align: center; border-right: 1px solid #374151;">${s.label}<br/><span style="font-size: 8px; font-weight: 400; opacity: 0.8;">(${s.m} Meses)</span></th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody style="background: #fff;">
+                                    <tr>
+                                        <td style="padding: 10px 15px; font-weight: 700; color: #374151; background: #f9fafb; border-right: 1px solid #e5e7eb;">Custos Operacionais</td>
+                                        ${scenarios.map(s => `<td style="padding: 10px 15px; text-align: center; border-right: 1px solid #e5e7eb; color: #ef4444;">${window.fmt(custoMensal * s.m)}</td>`).join('')}
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 10px 15px; font-weight: 700; color: #374151; background: #f9fafb; border-right: 1px solid #e5e7eb;">Comissão Venda (6%)</td>
+                                        ${scenarios.map(s => {
+                                            const v = (s.m >= 12 && getNum(data.valorVendaLongo) > 0) ? getNum(data.valorVendaLongo) : vendaBase;
+                                            return `<td style="padding: 10px 15px; text-align: center; border-right: 1px solid #e5e7eb; color: #ef4444;">${window.fmt(v * 0.06)}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                    <tr style="border-top: 2px solid #e5e7eb; font-weight: 800;">
+                                        <td style="padding: 12px 15px; background: #f1f5f9; border-right: 1px solid #e5e7eb;">INVESTIMENTO TOTAL</td>
+                                        ${scenarios.map(s => {
+                                            const total = investTotalBasico + (custoMensal * s.m) + desocupacao + seguro + assessoria;
+                                            return `<td style="padding: 12px 15px; text-align: center; border-right: 1px solid #e5e7eb; background: #f8fafc;">${window.fmt(total)}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                    <tr style="background: #fff; font-weight: 800; border-top: 1px solid #e5e7eb;">
+                                        <td style="padding: 12px 15px; color: #111827; background: #f1f5f9; border-right: 1px solid #e5e7eb;">LUCRO LÍQUIDO</td>
+                                        ${scenarios.map(s => {
+                                            const v = (s.m >= 12 && getNum(data.valorVendaLongo) > 0) ? getNum(data.valorVendaLongo) : vendaBase;
+                                            const total = investTotalBasico + (custoMensal * s.m) + desocupacao + seguro + assessoria;
+                                            const bruto = v - (v * 0.06) - total;
+                                            const liq = bruto > 0 ? bruto * 0.85 : bruto;
+                                            const color = liq > 0 ? '#16a34a' : '#dc2626';
+                                            return `<td style="padding: 12px 15px; text-align: center; border-right: 1px solid #e5e7eb; color: ${color};">${window.fmt(liq)}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                    <tr style="background: #111827; color: #FFD60A; font-weight: 900; font-size: 12px;">
+                                        <td style="padding: 12px 15px; border-right: 1px solid #374151;">ROI (%)</td>
+                                        ${scenarios.map(s => {
+                                            const v = (s.m >= 12 && getNum(data.valorVendaLongo) > 0) ? getNum(data.valorVendaLongo) : vendaBase;
+                                            const total = investTotalBasico + (custoMensal * s.m) + desocupacao + seguro + assessoria;
+                                            const bruto = v - (v * 0.06) - total;
+                                            const liq = bruto > 0 ? bruto * 0.85 : bruto;
+                                            const roi = total > 0 ? (liq / total) * 100 : 0;
+                                            return `<td style="padding: 12px 15px; text-align: center; border-right: 1px solid #374151;">${roi.toFixed(1)}%</td>`;
+                                        }).join('')}
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>`;
 
-                        // --- 3. UPDATE PDF FIELDS ---
+                        if (container) {
+                            container.innerHTML = scenariosHTML + acqSummaryHTML + tableHTML;
+                            console.log('✅ PDF Viability Content updated');
+                        }
+
+                        // PDF Fields Update (Always target source)
+                        // Update Capa (Page 1) and other financial areas in PDF
                         const setText = (id, txt) => {
-                            const params = document.querySelectorAll('#' + id);
-                            params.forEach(el => el.textContent = txt);
+                            pdfSource.querySelectorAll('#' + id).forEach(el => {
+                                el.textContent = txt;
+                            });
                         };
 
-                        // Update Financial Fields (these exist in saved calculations)
+                        console.log('💎 Updating PDF Fields:', { 
+                            Avaliacao: window.fmt(vlrAvaliacao), 
+                            Lance: window.fmt(vlrArremate),
+                            Cond: window.fmt(cond)
+                        });
+
                         setText('pdfAvaliacao', window.fmt(vlrAvaliacao));
                         setText('pdfLance', window.fmt(vlrArremate));
                         setText('pdfCondominio', window.fmt(cond));
 
-                        console.log('✅ PDF atualizado com:', {
-                            avaliacao: window.fmt(vlrAvaliacao),
-                            lance: window.fmt(vlrArremate),
-                            condominio: window.fmt(cond)
-                        });
-
-                        console.log('✅ PDF renderizado com sucesso.');
-                        // Refresh Preview
-                        setTimeout(() => {
-                            if (window.initializePDFPreview) {
-                                window.initializePDFPreview();
-                                console.log('✅ Preview atualizado');
-                            }
-                        }, 150);
+                        // Re-initialize preview to show changes
+                        if (typeof initializePDFPreview === 'function') {
+                            initializePDFPreview(); // Instant update
+                            setTimeout(() => initializePDFPreview(), 300); // Guard for late renders
+                        }
 
                     } catch (e) {
                         console.error("Render Error:", e);
-                        container.innerHTML = `<p class="text-red-500">Erro de renderização: ${e.message}</p>`;
-                    }
-                }
-
-                // Update PDF with manual financial data
-                function updateManualFinancialData() {
-                    // Manual inputs removed. 
-                    // Financial data is now strictly handled by loadCalculationData().
-                    console.log("Manual update disabled.");
-                }
-
-                // Refresh PDF preview after manual data update
-                const originalUpdateManual = updateManualFinancialData;
-                window.updateManualFinancialData = function () {
-                    originalUpdateManual();
-                    setTimeout(() => initializePDFPreview(), 100);
-                };
-
-                // NEW STRATEGY: Fetch from API on demand
-                async function loadCalculationData(select) {
-                    const id = select.value;
-                    const container = document.getElementById('pdfViabilityContent');
-
-                    if (!id) {
-                        // Optional: restore placeholder
-                        return;
-                    }
-
-                    // 0. Visual Loading Feedback
-                    container.innerHTML = `
-                        <div class="h-[400px] flex items-center justify-center">
-                            <p class="text-xl font-bold text-gray-400 animate-pulse">Carregando dados...</p>
-                        </div>
-                    `;
-
-                    try {
-                        // 1. Fetch Fresh Data (Avoids embedding issues)
-                        const response = await fetch('/api/saved-calculations');
-                        if (!response.ok) throw new Error("Falha ao buscar cálculos");
-
-                        const allCalcs = await response.json();
-                        const targetCalc = allCalcs.find(c => c.id == id);
-
-                        if (!targetCalc) {
-                            alert("Cálculo não encontrado.");
-                            return;
-                        }
-
-                        // 2. Parse Data Safe
-                        let data;
-                        try {
-                            data = typeof targetCalc.data === 'string' ? JSON.parse(targetCalc.data) : targetCalc.data;
-                        } catch (e) {
-                            console.error("JSON Error:", e);
-                            alert("Dados corrompidos.");
-                            return;
-                        }
-
-                        console.log("Dados carregados via API:", data);
-
-
-
-                        // HELPER: Float Parser (Prevents NaN)
-                        const num = (val) => {
-                            if (val === undefined || val === null || val === '') return 0;
-                            if (typeof val === 'string' && val.includes(',')) {
-                                const sanitized = val.replace(/\./g, '').replace(',', '.');
-                                return parseFloat(sanitized) || 0;
-                            }
-                            return parseFloat(val) || 0;
-                        };
-
-                        // ROBUST EXTRACTION (Key Fallbacks + Deep Search)
-                        const findDeep = (obj, key) => {
-                            if (!obj || typeof obj !== 'object') return null;
-
-                            // Direct match
-                            if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
-
-                            // Search in direct children (e.g., data.inputData.valorAvaliacao)
-                            for (const k in obj) {
-                                if (typeof obj[k] === 'object' && obj[k] !== null) {
-                                    const val = obj[k][key];
-                                    if (val !== undefined && val !== null && val !== '') return val;
-                                }
-                            }
-                            return null;
-                        };
-
-                        const getAnyDeep = (...keys) => {
-                            for (const k of keys) {
-                                const val = findDeep(data, k);
-                                if (val) return val;
-                            }
-                            return 0;
-                        };
-
-                        const rawAvaliacao = getAnyDeep('valorAvaliacao', 'avaliacao', 'valor_avaliacao', 'valorAvaliacaoCaixa');
-                        const rawArremate = getAnyDeep('valorArrematado', 'lance', 'valorLance', 'valor_arremate');
-                        const rawCondominio = getAnyDeep('condominioMensal', 'condominio', 'valorCondominio');
-
-                        // 1. UPDATE INPUTS
-                        if (document.getElementById('inputCondominio')) document.getElementById('inputCondominio').value = fmt(num(rawCondominio));
-
-                        // 2. UPDATE PDF HEADERS
-                        // 2. UPDATE PDF HEADERS (Preview AND Source)
-                        const setText = (id, txt) => {
-                            // Selector for duplicate IDs
-                            const elements = document.querySelectorAll(`[id="${id}"]`);
-                            elements.forEach(el => el.innerText = txt);
-                        }
-
-                        setText('pdfAvaliacao', fmt(num(rawAvaliacao)));
-                        setText('pdfLance', fmt(num(rawArremate)));
-                        setText('pdfCondominio', fmt(num(rawCondominio)));
-
-
-                        // 3. FINANCIAL CALCULATIONS (Robust)
-
-                        // Acquisition
-                        const vlrArremate = num(rawArremate);
-                        const vlrAvaliacao = num(rawAvaliacao);
-
-                        // Leiloeiro
-                        const leiloeiro = (data.incluirLeiloeiro === false || data.incluirLeiloeiro === 'false') ? 0 : vlrArremate * 0.05;
-
-                        // ITBI
-                        const itbiPercent = num(data.itbi) > 0 ? num(data.itbi) / 100 : 0.03;
-
-                        let itbi = 0;
-                        // Robust retrieval of ITBI base preference
-                        const rawItbiBase = getAnyDeep('itbiBase', 'itbi_base', 'base_itbi');
-                        // Also try to find a pre-calculated ITBI value to ensure full match
-                        const rawItbiValue = getAnyDeep('valorITBI', 'itbi_value');
-
-                        console.log('🔍 Debug ITBI - Raw Values:', {
-                            rawItbiValue,
-                            rawItbiBase,
-                            vlrAvaliacao: window.fmt(vlrAvaliacao),
-                            vlrArremate: window.fmt(vlrArremate),
-                            itbiPercent: data.itbi
-                        });
-
-                        if (true) {
-                            // IGNORE saved 'valorITBI' to ensure correctness. always recalculate.
-                            // Determine Base ITBI
-                            let baseMode = 'avaliacao'; // Default safest option
-
-                            // Check explicit preference
-                            if (rawItbiBase && typeof rawItbiBase === 'string') {
-                                const s = rawItbiBase.toLowerCase().trim();
-                                if (s === 'arremate' || s === 'lance') baseMode = 'arremate';
-                                else if (s === 'avaliacao') baseMode = 'avaliacao';
-                            }
-
-                            // Safety: If Avaliacao is missing/zero, fallback to Arremate
-                            if (vlrAvaliacao <= 0.1) baseMode = 'arremate';
-
-                            const baseItbi = (baseMode === 'avaliacao') ? vlrAvaliacao : vlrArremate;
-                            itbi = baseItbi * itbiPercent;
-                            console.log('👉 Force Recalculated ITBI:', { baseMode, baseItbi, itbiPercent, result: itbi });
-                        }
-
-
-                        // Assessoria
-                        // Assessoria (Standard: 7k up to 140k, then 5%)
-                        let assessoria = 0;
-                        const stdThresh = 140000;
-                        const stdFee = 7000;
-                        const stdPct = 0.05;
-
-                        if (data.assessoriaThreshold !== undefined) {
-                            const thresh = num(data.assessoriaThreshold) || stdThresh;
-                            const feeLow = num(data.assessoriaFeeBelow) || stdFee;
-                            const feeHighPct = (num(data.assessoriaFeeAbovePercent) || 5) / 100;
-
-                            assessoria = vlrArremate <= thresh ? feeLow : vlrArremate * feeHighPct;
-                        } else if (data.valorAssessoria && num(data.valorAssessoria) > 0) {
-                            assessoria = num(data.valorAssessoria);
-                        } else {
-                            // Standard Default
-                            assessoria = vlrArremate <= stdThresh ? stdFee : vlrArremate * stdPct;
-                        }
-
-                        // Other Costs
-                        const cartorio = num(data.custosCartorarios);
-                        const reforma = num(data.reforma);
-                        const debitos = num(data.debitosPendentes);
-                        const desocupacao = num(data.custoDesocupacao);
-                        const seguro = 190;
-                        const outros = num(data.custosAdicionais); // Add support for 'custosAdicionais' if present in data
-
-                        // Monthly Recurrent
-                        const cond = num(data.condominioMensal);
-                        const iptuMo = num(data.iptuMensal);
-                        const custoMensal = cond + iptuMo;
-
-                        // Costs Base (Fixed)
-                        const investTotalBasico = vlrArremate + leiloeiro + itbi + cartorio + reforma + debitos + outros;
-
-                        // Projections Base
-                        const venda = num(data.valorVendaFinal) > 0 ? num(data.valorVendaFinal) : vlrAvaliacao;
-                        const corretagem = venda * 0.06;
-
-                        // Calculate 12 Month Base values for Details Section
-                        const op12 = custoMensal * 12;
-                        const invest12 = investTotalBasico + op12 + desocupacao + seguro + assessoria;
-                        const bruto12 = venda - corretagem - invest12;
-                        const imposto12 = bruto12 > 0 ? bruto12 * 0.15 : 0;
-
-                        // GENERATE SCENARIOS (4, 8, 12, 16 Months)
-                        const scenarios = [
-                            { m: 4, label: 'Venda Rápida' },
-                            { m: 8, label: 'Venda Média' },
-                            { m: 12, label: 'Venda Longa' },
-                            { m: 16, label: 'Venda Tardia' }
-                        ];
-
-                        let scenariosHTML = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">';
-
-                        scenarios.forEach(s => {
-                            const opCost = custoMensal * s.m;
-
-                            // Calculate Total Invested for this scenario
-                            // Formula: Base + Operational(Months) + Desocupacao + Seguro + Assessoria
-                            const investTotal = investTotalBasico + opCost + desocupacao + seguro + assessoria;
-
-                            // Determine Sales Value (Short vs Long Term)
-                            let vendaCenario = venda;
-                            if (s.m >= 12) {
-                                const vendaLongo = num(data.valorVendaLongo);
-                                if (vendaLongo > 0) {
-                                    vendaCenario = vendaLongo;
-                                }
-                            }
-                            // Recalculate brokerage/taxes based on the specific sales value
-                            const corretagemCenario = vendaCenario * 0.06;
-
-                            const bruto = vendaCenario - corretagemCenario - investTotal;
-                            const imposto = bruto > 0 ? bruto * 0.15 : 0;
-                            const liq = bruto - imposto;
-                            const roi = investTotal > 0 ? (liq / investTotal) * 100 : 0;
-                            const isPositive = liq > 0;
-                            const color = isPositive ? '#34C759' : '#FF3B30';
-                            const borderColor = isPositive ? 'rgba(52, 199, 89, 0.2)' : 'rgba(255, 59, 48, 0.2)';
-
-                            // Generate Card HTML (Exact replica of Calculadora Visuals)
-                            scenariosHTML += `
-                                <div style="background: #fff; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; border: 1px solid ${borderColor}; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                                    <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: ${color};"></div>
-                                    
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px;">
-                                            ${s.label}
-                                        </span>
-                                        <span style="background: #f3f4f6; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; color: #374151;">
-                                            ${s.m} Meses
-                                        </span>
-                                    </div>
-
-                                    <div style="margin-bottom: 16px;">
-                                        <p style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Lucro Líquido</p>
-                                        <h3 style="font-size: 24px; font-weight: 700; color: ${color}; letter-spacing: -0.5px; margin: 0;">
-                                            ${fmt(liq)}
-                                        </h3>
-                                    </div>
-
-                                    <div style="margin-bottom: 12px;">
-                                        <p style="font-size: 10px; color: #6b7280; margin-bottom: 1px;">Total Investido</p>
-                                        <p style="font-size: 14px; font-weight: 600; color: #111827; margin: 0;">
-                                            ${fmt(investTotal)}
-                                        </p>
-                                    </div>
-
-                                    <div style="margin-bottom: 16px;">
-                                        <p style="font-size: 10px; color: #6b7280; margin-bottom: 1px;">Valor de Venda</p>
-                                        <p style="font-size: 14px; font-weight: 600; color: #34C759; margin: 0;">
-                                            ${fmt(vendaCenario)}
-                                        </p>
-                                    </div>
-
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
-                                        <div>
-                                            <p style="font-size: 10px; color: #6b7280; margin-bottom: 1px;">ROI</p>
-                                            <p style="font-size: 12px; font-weight: 700; color: ${color}; margin: 0;">
-                                                ${roi.toFixed(2)}%
-                                            </p>
-                                        </div>
-                                        <div style="text-align: right;">
-                                            <p style="font-size: 10px; color: #6b7280; margin-bottom: 1px;">Custo/Mês</p>
-                                            <p style="font-size: 12px; font-weight: 600; color: #111827; margin: 0;">
-                                                ${fmt(custoMensal)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        });
-
-                        scenariosHTML += '</div>';
-
-                        // DETAILS SECTION (Replica of Modal)
-                        const detailsHTML = `
-                            <div style="margin-top: 20px; padding-top: 20px; border-top: 2px dashed #e5e7eb;">
-                                <h3 style="font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 20px;">Detalhamento Financeiro</h3>
-                                
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px;">
-                                    <!-- Left Column -->
-                                    <div>
-                                        <!-- Custos de Aquisicao -->
-                                        <div style="margin-bottom: 24px;">
-                                            <h4 style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; letter-spacing: 0.5px;">
-                                                Custos de Aquisição
-                                            </h4>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Valor de Arremate</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(vlrArremate)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Assessoria</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(assessoria)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Leiloeiro (5%)</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(leiloeiro)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">ITBI</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(itbi)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Cartório / Registro</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(cartorio)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Reforma</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(reforma)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Débitos Pendentes</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(debitos)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Desocupação</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(desocupacao)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Right Column -->
-                                    <div>
-                                        <!-- Custos de Venda -->
-                                        <div style="margin-bottom: 24px;">
-                                            <h4 style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; letter-spacing: 0.5px;">
-                                                Custos de Venda
-                                            </h4>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Corretagem</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(corretagem)}</span>
-                                            </div>
-                                        </div>
-
-                                        <!-- Valor de Venda -->
-                                        <div style="margin-bottom: 24px;">
-                                            <h4 style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; letter-spacing: 0.5px;">
-                                                Valor de Venda
-                                            </h4>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Valor de Venda Estimado</span>
-                                                <span style="font-weight: 700; color: #34C759; font-size: 14px;">${fmt(venda)}</span>
-                                            </div>
-                                        </div>
-
-                                        <!-- Simulação Impostos (Ex: 12 Meses) -->
-                                        <div style="margin-bottom: 12px;">
-                                            <h4 style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; letter-spacing: 0.5px;">
-                                                Impostos e Manutenção (Base 12 Meses)
-                                            </h4>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Imposto de Renda (15%)</span>
-                                                <span style="font-weight: 600; color: #FF3B30;">${fmt(imposto12)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
-                                                <span style="color: #6b7280;">Manutenção (Cond./IPTU)</span>
-                                                <span style="font-weight: 600; color: #111827;">${fmt(op12)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-
-                        document.getElementById('pdfViabilityContent').innerHTML = scenariosHTML + detailsHTML;
-                    } catch (e) {
-                        console.error("Erro Fatal:", e);
-                        const container = document.getElementById('pdfViabilityContent');
-                        if (container) {
-                            container.innerHTML = `
-                                 <div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded text-center">
-                                     <p class="font-bold">Erro de Carregamento</p>
-                                     <p class="text-xs font-mono">${e.message}</p>
-                                 </div>
-                             `;
-                        }
-                        alert("Erro no carregamento: " + e.message);
                     }
                 }
 
@@ -2762,7 +2401,7 @@
                     'inputNome', 'inputEndereco', 'inputBem', 'inputLicitacao',
                     'inputApto', 'inputMetragem', 'inputQuartos', 'inputBanheiros',
                     'inputVaga', 'inputCondominio', 'inputInstagram', 'inputCreci',
-                    'inputFooter', 'inputValorArremate', 'inputValorAvaliacao', 'inputValorVenda'
+                    'inputFooter', 'inputValorAvaliacao'
                 ];
 
 
@@ -2949,9 +2588,16 @@
                     console.log("Starting PDF Generation...");
 
                     // 0. FORCE UPDATE FINANCIALS
-                    // Ensure #pdf-content has fresh calculations for headers (Lance, Avaliacao)
+                    console.log("💎 PDF Generation - Current Data:", currentCalcData);
+                    
+                    // Final sync from inputs just in case user changed something manually
                     if (typeof updateManualFinancialData === 'function') {
                         updateManualFinancialData();
+                    }
+                    
+                    // Final render pass to ensure #pdf-content is perfect
+                    if (typeof renderScenarioResults === 'function') {
+                        renderScenarioResults(currentCalcData);
                     }
 
                     // Helper: Title Case Transform
@@ -3011,14 +2657,6 @@
                     // Updates the #pdf-content DOM directly with new values (Lance, Avaliacao)
                     if (typeof updateManualFinancialData === 'function') {
                         updateManualFinancialData();
-                    }
-
-                    // 3. SYNC FINANCIAL TABLE (Visual Preview -> Hidden Source)
-                    const visibleCalc = document.querySelector('#pdf-preview-container #pdfViabilityContent');
-                    const hiddenCalc = document.querySelector('#pdf-content #pdfViabilityContent');
-
-                    if (visibleCalc && hiddenCalc && visibleCalc.innerHTML.trim() !== "") {
-                        hiddenCalc.innerHTML = visibleCalc.innerHTML;
                     }
 
                     // 3. CAPTURE CONTENT
@@ -3158,6 +2796,7 @@
                     });
                 })();
             </script>
-</body>
+        </main>
+    </body>
 
 </html>

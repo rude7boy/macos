@@ -8,12 +8,13 @@ import SQLiteStore from 'connect-sqlite3';
 import { open } from 'sqlite';
 import multer from 'multer';
 import sqlite3 from 'sqlite3';
-import ViabilityCalculator from './ViabilityCalculator.js'; // Force restart
+import ViabilityCalculator from './services/ViabilityCalculator.js'; // Force restart
 import { body, validationResult } from 'express-validator';
 // import { createClient } from '@supabase/supabase-js'; // Removed
 import nodemailer from 'nodemailer';
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
+import puppeteer from 'puppeteer';
 
 const scryptAsync = promisify(scrypt);
 
@@ -34,7 +35,7 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 // ========================================
 
 const app = express();
-app.enable('trust proxy'); // CRUCIAL para EasyPanel/Traefik para reconhecer HTTPS, corrige loop de login
+app.set('trust proxy', 1); // Apenas 1 proxy à frente (Nginx) - corrige ERR_ERL_PERMISSIVE_TRUST_PROXY
 console.log('✅ Trust Proxy habilitado para EasyPanel');
 const PORT = process.env.PORT || 3000;
 
@@ -192,12 +193,15 @@ app.use((req, res, next) => {
 });
 console.log('✅ Sanitização de inputs ativada');
 
-// 7. Headers de segurança adicionais
+// 8. Headers de segurança adicionais
 app.use((req, res, next) => {
     // HSTS - Force HTTPS em produção
     if (process.env.NODE_ENV === 'production') {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     }
+
+    // Permissive CSP for Preview and External Assets (Required for Da Vinci and Maps)
+    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline' 'unsafe-eval'; img-src * data: blob:; font-src *; connect-src *; frame-src *;");
 
     // Referrer Policy
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -238,8 +242,57 @@ app.locals.safeCompare = safeCompare;
 // ========================================
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json({ limit: '10mb' })); // Limite de 10MB para JSON
-app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Limite de 10MB para form data
+app.use(express.json({ limit: '50mb' })); // Limite aumentado para geração de PDF com imagens
+app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Limite aumentado para form data
+
+// ========================================
+// API DE GERAÇÃO DE PDF (PUPPETEER) - Backend sólido e sem erros de layout
+// ========================================
+app.post('/api/generate-pdf', async (req, res) => {
+    let browser;
+    try {
+        const { html, filename = 'proposta.pdf' } = req.body;
+        if (!html) {
+            return res.status(400).json({ error: 'HTML é obrigatório' });
+        }
+
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+
+        const page = await browser.newPage();
+        await page.setViewport({ width: 794, height: 1123 }); // A4 em 96dpi
+        await page.emulateMediaType('print');
+
+        // Injeta o HTML completo e aguarda recursos (imagens, fontes) carregarem
+        await page.setContent(html, { waitUntil: 'networkidle0', timeout: 45000 });
+
+        // Aguarda fontes do Google Fonts renderizarem
+        await page.evaluate(() => document.fonts.ready);
+
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
+            preferCSSPageSize: true
+        });
+
+        await browser.close();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        res.end(pdfBuffer);
+
+    } catch (error) {
+        if (browser) await browser.close().catch(() => {});
+        console.error('❌ Erro ao gerar PDF via Puppeteer:', error);
+        res.status(500).json({ error: 'Erro interno ao gerar o PDF. Tente novamente.' });
+    }
+});
+console.log('✅ API de geração de PDF (Puppeteer) ativada em POST /api/generate-pdf');
+// ========================================
 
 // --- Configuração do Multer para Upload de Arquivos ---
 // Tipos de arquivo permitidos
@@ -480,23 +533,9 @@ async function ensureTables() {
         key TEXT PRIMARY KEY,
         value TEXT
     )`);
-    // Seed default fee
-    await db.run("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('default_mining_fee', '500')");
 
-    // 8. Tabela Comissões de Mineração
-    await db.run(`CREATE TABLE IF NOT EXISTS comissoes_mineracao (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        imovel_id INTEGER,
-        minerador_id INTEGER, -- Quem cadastrou a oportunidade
-        assessor_venda_id INTEGER, -- Quem arrematou/vendeu
-        valor REAL,
-        status TEXT DEFAULT 'pendente', -- pendente, pago
-        data_geracao DATETIME DEFAULT CURRENT_TIMESTAMP,
-        data_pagamento DATETIME,
-        FOREIGN KEY(imovel_id) REFERENCES carteira_imoveis(id),
-        FOREIGN KEY(minerador_id) REFERENCES users(id),
-        FOREIGN KEY(assessor_venda_id) REFERENCES users(id)
-    )`);
+
+
 
     console.log('✅ Tabelas verificadas/criadas com sucesso.');
 
@@ -563,6 +602,9 @@ async function ensureTables() {
             estado TEXT,
             cidade TEXT,
 
+            -- Produto de Interesse
+            interesse TEXT DEFAULT 'nao_informado', -- 'assessoria' | 'mentoria_online' | 'mentoria_individual' | 'licenciado' | 'promotor' | 'eventos'
+
             -- Metadados
             score INTEGER DEFAULT 0,
             status TEXT DEFAULT 'novo', -- 'novo', 'contatado', 'convertido', 'desqualificado'
@@ -576,6 +618,17 @@ async function ensureTables() {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Migração automática: garante coluna 'interesse' em bancos existentes
+    try {
+        const leadsCols = (await db.all(`PRAGMA table_info(leads)`)).map(c => c.name);
+        if (!leadsCols.includes('interesse')) {
+            await db.exec(`ALTER TABLE leads ADD COLUMN interesse TEXT DEFAULT 'nao_informado'`);
+            console.log('✅ Coluna "interesse" adicionada à tabela leads.');
+        }
+    } catch(e) {
+        console.error('Migração leads (interesse):', e.message);
+    }
 
     // Tabela de Oportunidades (Imóveis Estudados)
     await db.exec(`
@@ -785,7 +838,31 @@ async function ensureAdminUser() {
     }
 }
 
+async function ensureSecondaryUser() {
+    console.log('🛡️ Verificando usuário secundário (Chefia)...');
+    const email = 'fortalestrutura@gmail.com';
+    const username = 'Gestão Leads';
+
+    try {
+        const hashedPassword = await hashPassword('35153515');
+        const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+        if (!user) {
+            console.log('✨ Criando usuário secundário...');
+            await db.run('INSERT INTO users (username, password, email, is_admin) VALUES (?, ?, ?, 0)',
+                [username, hashedPassword, email]);
+        } else {
+            console.log('🔄 Atualizando usuário secundário...');
+            await db.run('UPDATE users SET password = ?, is_admin = 0, username = ? WHERE email = ?',
+                [hashedPassword, username, email]);
+        }
+        console.log('✅ Usuário secundário configurado com sucesso.');
+    } catch (e) {
+        console.error('❌ Erro ao configurar usuário secundário:', e);
+    }
+}
+
 await ensureAdminUser();
+await ensureSecondaryUser();
 // ========================================
 
 // --- Middleware de Autenticação ---
@@ -817,6 +894,7 @@ const apiLimiter = rateLimit({
     message: 'Muitas requisições deste IP, tente novamente em 15 minutos.',
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { trustProxy: false }, // Evita ERR_ERL_PERMISSIVE_TRUST_PROXY
 });
 
 // Rate limiter para autenticação (mais restritivo)
@@ -825,6 +903,7 @@ const authLimiter = rateLimit({
     max: 5, // 5 tentativas de login
     message: 'Muitas tentativas de login, tente novamente em 15 minutos.',
     skipSuccessfulRequests: true,
+    validate: { trustProxy: false }, // Evita ERR_ERL_PERMISSIVE_TRUST_PROXY
 });
 
 // Rate limiter para uploads (muito restritivo)
@@ -832,6 +911,7 @@ const uploadLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hora
     max: 10, // 10 uploads por hora
     message: 'Limite de uploads atingido, tente novamente em 1 hora.',
+    validate: { trustProxy: false }, // Evita ERR_ERL_PERMISSIVE_TRUST_PROXY
 });
 
 console.log('✅ Rate limiting configurado');
@@ -982,80 +1062,16 @@ app.post('/api/analise-documentos/process', isAuthenticated, memoryUpload.fields
     }
 });
 
-// Rota de Login
-app.get('/login', (req, res) => {
-    res.render('login', { message: req.query.message || null, error: req.query.error || null });
-});
+// Rota de Autenticação Modularizada
+app.use('/', (await import('./routes/auth.js')).default);
 
-// Processar Login (Local)
-app.post('/login', authLimiter, async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        // Tenta buscar por email ou username
-        const user = await db.get('SELECT * FROM users WHERE email = ? OR username = ?', [username, username]);
-
-        if (!user) {
-            return res.render('login', { message: null, error: 'Usuário ou senha incorretos.' });
-        }
-
-        // Verifica senha
-        // Nota: Usuários migrados do Supabase sem senha definida no DB local não conseguirão logar por senha até redefinirem.
-        const isValid = await verifyPassword(password, user.password);
-        if (!isValid) {
-            return res.render('login', { message: null, error: 'Usuário ou senha incorretos.' });
-        }
-
-        // Cria sessão
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.email = user.email;
-        req.session.profile_pic_url = user.profile_pic_url;
-        req.session.isAdmin = !!(user.is_admin || (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())));
-
-        console.log('🔐 Login bem-sucedido:', {
-            email: user.email,
-            is_admin_db: user.is_admin,
-            in_admin_list: user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()),
-            final_isAdmin: req.session.isAdmin
-        });
-
-        res.redirect('/');
-    } catch (err) {
-        console.error('Login Error:', err);
-        // Debug: Mostrando erro real para o usuário
-        res.render('login', { message: null, error: 'Erro: ' + err.message });
-    }
-});
-
-// Logout Route
-app.post('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-            return res.redirect('/');
-        }
-        res.clearCookie('arremata.sid');
-        res.redirect('/login');
-    });
-});
-
-app.get('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-            return res.redirect('/');
-        }
-        res.clearCookie('arremata.sid');
-        res.redirect('/login');
-    });
-});
 
 // Middleware de Verificação de Admin Estrita
 const requireAdmin = (req, res, next) => {
     if (!req.session.userId) return res.redirect('/login');
 
     // Lista hardcoded de admins permitidos (Camada extra de segurança)
-    const ALLOWED_ADMINS = ['fortalestrutura@gmail.com'];
+    const ALLOWED_ADMINS = []; // Removido fortalestrutura@gmail.com como solicitado
     const isAdminEmail = req.session.email && ALLOWED_ADMINS.includes(req.session.email.toLowerCase());
 
     // Verifica flag do banco E lista de email
@@ -1408,43 +1424,7 @@ app.get('/', isAuthenticated, async (req, res) => {
             };
         }
 
-        // --- CALCULO DE COMISSÕES DETALHADO ---
 
-        let commissionDetails = [];
-        let totalCommission = 0;
-
-        // 1. Mineração (Estudos Adicionados) - R$ 500,00 fixo por estudo
-        try {
-            const userOpps = await db.all("SELECT id, titulo, created_at FROM oportunidades WHERE user_id = ?", [req.session.userId]);
-            userOpps.forEach(op => {
-                const val = 500.00;
-                commissionDetails.push({
-                    tipo: 'Mineração (Estudo)',
-                    descricao: op.titulo || 'Oportunidade #' + op.id,
-                    data: op.created_at,
-                    valor: val
-                });
-                totalCommission += val;
-            });
-        } catch (e) { console.error('Erro calc comissao mineracao:', e); }
-
-        // 2. Corretagem (Gestão de Carteira) - 6% do VGV dos clientes ativos
-        if (typeof properties !== 'undefined') {
-            properties.forEach(p => {
-                // Se o imóvel tem valor de venda estimado, calcula 6%
-                const vgv = p.valor_venda_estimado || 0;
-                if (vgv > 0) {
-                    const val = vgv * 0.06;
-                    commissionDetails.push({
-                        tipo: 'Corretagem (Venda)',
-                        descricao: p.descricao || 'Imóvel Carteira #' + p.id,
-                        data: p.created_at || new Date(),
-                        valor: val
-                    });
-                    totalCommission += val;
-                }
-            });
-        }
 
         // --- Blacklist Logic Implementation ---
 
@@ -1492,7 +1472,7 @@ app.get('/', isAuthenticated, async (req, res) => {
 
         const advisorStats = {
             vgv_gestao: vgvManagement,
-            comissao_prevista: totalCommission, // Atualizado com cálculo detalhado
+
             clientes_ativos: activeClients,
             total_imoveis: totalProperties,
             leads_waiting: validLeadsCount, // Only valid ones shown in main counter
@@ -1507,7 +1487,7 @@ app.get('/', isAuthenticated, async (req, res) => {
             stats: advisorStats,
             growth: growthData,
             recentProperties: recentProperties,
-            commissionDetails: commissionDetails // NEW: Passa o detalhamento
+            commissionDetails: []
         });
     } catch (error) {
         console.error('❌ ERRO CRÍTICO NO DASHBOARD:', error.message);
@@ -1752,27 +1732,7 @@ app.post('/historico/add', isAuthenticated, [
 
         const imovelId = carteiraResult.lastID;
 
-        // --- COMISSÃO DE MINERAÇÃO (Lógica Automática) ---
-        // Verificar se esse arremate veio de uma oportunidade cadastrada
-        // Como o form manual não passa ID da oportunidade original, vamos tentar inferir pelo título/descrição 
-        // ou futuramente adicionar um hidden field 'origin_opportunity_id' no form.
-        // POR ENQUANTO: Se for manual, não gera comissão automática a menos que vinculemos explicitamente.
-        // ... Logica de vinculação será melhor aplicada na importação direta da Oportunidade -> Carteira.
 
-        // Se houver opportunity_id vindo do body (vamos adicionar isso no form editavel/importacao)
-        if (req.body.origin_opportunity_id) {
-            const originOp = await db.get('SELECT user_id FROM oportunidades WHERE id = ?', [req.body.origin_opportunity_id]);
-            if (originOp) {
-                // Get Default Fee
-                const feeSetting = await db.get("SELECT value FROM system_settings WHERE key = 'default_mining_fee'");
-                const feeValue = parseFloat(feeSetting?.value || 500);
-
-                await db.run(`INSERT INTO comissoes_mineracao (imovel_id, minerador_id, assessor_venda_id, valor, status) 
-                              VALUES (?, ?, ?, ?, 'pendente')`,
-                    [imovelId, originOp.user_id, req.session.userId, feeValue]);
-                console.log(`💰 Comissão de mineração gerada: R$ ${feeValue} para User ${originOp.user_id}`);
-            }
-        }
 
 
 
@@ -2069,11 +2029,12 @@ app.get('/oportunidades', isAuthenticated, async (req, res) => {
     try {
         console.log('--- Acessando /oportunidades ---');
 
-        // Busca oportunidades COM o nome do assessor (JOIN)
+        // Busca oportunidades COM o nome do assessor (JOIN), ignorando as removidas
         const oportunidades = await db.all(`
             SELECT oportunidades.*, users.username as autor, users.email as autor_email
             FROM oportunidades 
             LEFT JOIN users ON oportunidades.user_id = users.id 
+            WHERE oportunidades.status != 'removido'
             ORDER BY oportunidades.created_at DESC
         `);
 
@@ -2434,1785 +2395,23 @@ app.post('/calculadora/salvar', isAuthenticated, [
 // Carteira / Dashboard do Lead
 // -----------------------------------
 
-// Helper: Consolidated Portfolio Data Fetching & Healing
-async function getPortfolioData(userId) {
-    // 1. Fetch Imoveis with Aggregated Costs
-    const imoveis = await db.all(`
-        SELECT
-        i.*,
-            (i.valor_compra + IFNULL((SELECT SUM(c.valor) FROM carteira_custos c WHERE c.imovel_id = i.id), 0)) as total_investido,
-    IFNULL((SELECT SUM(c.valor) FROM carteira_custos c WHERE c.imovel_id = i.id), 0) as total_custos
-        FROM carteira_imoveis i
-        WHERE i.user_id = ?
-    ORDER BY i.data_aquisicao DESC
-    `, [userId]);
 
-    // 2. Fetch Helper Data for Healing
-    const savedCalcs = await db.all('SELECT data FROM saved_calculations WHERE user_id = ? ORDER BY id DESC', [userId]);
-    const arremates = await db.all('SELECT descricao_imovel, calc_valor_venda FROM arremates WHERE user_id = ?', [userId]);
-
-    // 3. Deep Healing Logic (In-Memory & DB Update)
-    for (let imovel of imoveis) {
-        let dataUpdated = false;
-
-        // Check if vital financial data is missing
-        const needsHealing = (!imovel.valor_venda_estimado || imovel.valor_venda_estimado === 0) ||
-            (!imovel.condominio_estimado || imovel.condominio_estimado === 0) ||
-            (!imovel.iptu_estimado || imovel.iptu_estimado === 0);
-
-        if (needsHealing) {
-            // Level 1: Match by Description in Arremates
-            const arremate = arremates.find(a => a.descricao_imovel === imovel.descricao);
-            if (arremate && arremate.calc_valor_venda > 0) {
-                if (!imovel.valor_venda_estimado) {
-                    imovel.valor_venda_estimado = arremate.calc_valor_venda;
-                    dataUpdated = true;
-                }
-            }
-
-            // Level 2: Match by Price in Saved Calculations (Legacy Recovery)
-            // Check again if we still miss data after L1
-            const stillNeedsCosts = (!imovel.condominio_estimado || imovel.condominio_estimado === 0) ||
-                (!imovel.iptu_estimado || imovel.iptu_estimado === 0) ||
-                (!imovel.valor_venda_estimado || imovel.valor_venda_estimado === 0);
-
-            if (stillNeedsCosts) {
-                const match = savedCalcs.find(sc => {
-                    const data = JSON.parse(sc.data);
-                    return Math.abs(parseFloat(data.valorArrematado) - imovel.valor_compra) < 1.0;
-                });
-
-                if (match) {
-                    const data = JSON.parse(match.data);
-
-                    if ((!imovel.valor_venda_estimado || imovel.valor_venda_estimado === 0) && data.valorVendaFinal) {
-                        imovel.valor_venda_estimado = parseFloat(data.valorVendaFinal);
-                        dataUpdated = true;
-                    }
-                    if (!imovel.condominio_estimado && data.condominioMensal) {
-                        imovel.condominio_estimado = parseFloat(data.condominioMensal);
-                        dataUpdated = true;
-                    }
-                    if (!imovel.iptu_estimado) {
-                        let iptu = parseFloat(data.iptuMensal) || 0;
-                        if (!iptu && data.iptuAnual) iptu = parseFloat(data.iptuAnual) / 12;
-                        if (iptu > 0) {
-                            imovel.iptu_estimado = iptu;
-                            dataUpdated = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Persist updates if healing occurred
-        if (dataUpdated) {
-            await db.run(
-                'UPDATE carteira_imoveis SET valor_venda_estimado = ?, condominio_estimado = ?, iptu_estimado = ? WHERE id = ?',
-                [imovel.valor_venda_estimado, imovel.condominio_estimado || 0, imovel.iptu_estimado || 0, imovel.id]
-            );
-
-            // Ensure Monthly Costs exist in Costs Table (Self-healing)
-            const today = new Date().toISOString().split('T')[0];
-
-            if (imovel.condominio_estimado > 0) {
-                const hasCond = await db.get('SELECT id FROM carteira_custos WHERE imovel_id = ? AND tipo_custo = "Condomínio"', [imovel.id]);
-                if (!hasCond) {
-                    await db.run('INSERT INTO carteira_custos (user_id, imovel_id, tipo_custo, valor, data_custo, descricao) VALUES (?, ?, ?, ?, ?, ?)',
-                        [userId, imovel.id, 'Condomínio', imovel.condominio_estimado, today, 'Condomínio (Recuperado)']);
-                    console.log(`🔧 Healing: Added missing Condomínio cost for Imovel ${imovel.id}`);
-                }
-            }
-            if (imovel.iptu_estimado > 0) {
-                // Check if any IPTU related cost exists
-                const hasIPTU = await db.get('SELECT id FROM carteira_custos WHERE imovel_id = ? AND tipo_custo = "Impostos" AND (descricao LIKE "%IPTU%" OR valor = ?)', [imovel.id, imovel.iptu_estimado]);
-                if (!hasIPTU) {
-                    await db.run('INSERT INTO carteira_custos (user_id, imovel_id, tipo_custo, valor, data_custo, descricao) VALUES (?, ?, ?, ?, ?, ?)',
-                        [userId, imovel.id, 'Impostos', imovel.iptu_estimado, today, 'IPTU (Recuperado)']);
-                    console.log(`🔧 Healing: Added missing IPTU cost for Imovel ${imovel.id}`);
-                }
-            }
-        }
-    }
-
-    // 4. Calculate KPIs
-    let totalInvestidoGeral = 0;
-    let totalInvestidoComEstimativa = 0;
-    let lucroPotencialGeral = 0;
-    let totalRecorrenteMensal = 0;
-
-    imoveis.forEach(imovel => {
-        const investido = parseFloat(imovel.total_investido) || 0;
-        const vendaEstimada = parseFloat(imovel.valor_venda_estimado) || 0;
-
-        totalInvestidoGeral += investido;
-
-        if (vendaEstimada > 0) {
-            totalInvestidoComEstimativa += investido;
-            const corretagem = vendaEstimada * 0.06;
-            const lucroBruto = vendaEstimada - corretagem - investido;
-            const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-            const lucroLiquido = lucroBruto - imposto;
-
-            lucroPotencialGeral += lucroLiquido;
-            imovel.lucro_liquido_estimado = lucroLiquido;
-            imovel.roi_estimado = investido > 0 ? (lucroLiquido / investido) * 100 : 0;
-        } else {
-            imovel.lucro_liquido_estimado = 0;
-            imovel.roi_estimado = 0;
-        }
-
-        const cond = parseFloat(imovel.condominio_estimado) || 0;
-        const iptu = parseFloat(imovel.iptu_estimado) || 0;
-        totalRecorrenteMensal += (cond + iptu);
-    });
-
-    const kpis = {
-        total_investido: totalInvestidoGeral,
-        lucro_potencial: lucroPotencialGeral,
-        roi_medio: totalInvestidoComEstimativa > 0 ? ((lucroPotencialGeral / totalInvestidoComEstimativa) * 100).toFixed(1) : 0,
-        total_imoveis: imoveis.length,
-        custo_recorrente_mensal: totalRecorrenteMensal
-    };
-
-    // 5. Fetch Monthly Costs History
-    const custosPorMes = await db.all(`
-        SELECT strftime('%Y-%m', data_custo) as mes, SUM(valor) as total
-        FROM carteira_custos
-        WHERE user_id = ? AND data_custo >= date('now', '-12 months')
-        GROUP BY mes
-        ORDER BY mes ASC
-    `, [userId]);
-
-    // 6. Calculate Monthly Growth Data (Last 6 Months) for Advisor Performance
-    const months = {};
-    const today = new Date();
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const key = d.toISOString().slice(0, 7); // YYYY-MM
-        months[key] = {
-            label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(),
-            profit: 0,
-            volume: 0
-        };
-    }
-
-    imoveis.forEach(imovel => {
-        if (imovel.data_aquisicao && imovel.lucro_liquido_estimado) {
-            try {
-                const dateVal = new Date(imovel.data_aquisicao);
-                if (!isNaN(dateVal.getTime())) {
-                    const dateKey = dateVal.toISOString().slice(0, 7);
-                    if (months[dateKey]) {
-                        months[dateKey].profit += parseFloat(imovel.lucro_liquido_estimado);
-                        months[dateKey].volume += 1;
-                    }
-                }
-            } catch (e) {
-                console.warn(`Data inválida para imóvel ${imovel.id}: `, imovel.data_aquisicao);
-            }
-        }
-    });
-
-    const growthData = {
-        labels: Object.values(months).map(m => m.label),
-        profitData: Object.values(months).map(m => m.profit),
-        volumeData: Object.values(months).map(m => m.volume)
-    };
-
-    return { imoveis, kpis, custosPorMes, growthData };
-}
 
 // ========================================
 // ROTAS DE API - CLIENTES
 // ========================================
 
-// Listar todos os clientes do assessor
-app.get('/api/clientes', isAuthenticated, async (req, res) => {
-    try {
-        const clientes = await db.all(`
-SELECT
-c.*,
-    COUNT(DISTINCT ci.id) as total_imoveis,
-    COALESCE(SUM(ci.valor_compra), 0) as total_investido,
-    COALESCE(SUM(ci.valor_venda_estimado), 0) as total_valor_venda
-            FROM clientes c
-            LEFT JOIN carteira_imoveis ci ON c.id = ci.cliente_id
-            WHERE c.assessor_id = ?
-    GROUP BY c.id
-            ORDER BY c.created_at DESC
-    `, [req.session.userId]);
+// Rotas de Clientes Modularizadas
+app.use('/', (await import('./routes/clientes.js')).default);
 
-        // Calcular ROI médio para cada cliente
-        const clientesComROI = await Promise.all(clientes.map(async (cliente) => {
-            const imoveis = await db.all(
-                'SELECT * FROM carteira_imoveis WHERE cliente_id = ?',
-                [cliente.id]
-            );
-
-            let totalROI = 0;
-            let countROI = 0;
-
-            for (const imovel of imoveis) {
-                const custos = await db.all(
-                    'SELECT SUM(valor) as total FROM carteira_custos WHERE imovel_id = ?',
-                    [imovel.id]
-                );
-                const totalCustos = custos[0]?.total || 0;
-                const totalInvestido = (imovel.valor_compra || 0) + totalCustos;
-                const valorVenda = imovel.valor_venda_estimado || 0;
-
-                if (valorVenda > 0 && totalInvestido > 0) {
-                    const corretagem = valorVenda * 0.06;
-                    const lucroBruto = valorVenda - corretagem - totalInvestido;
-                    const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-                    const lucroLiquido = lucroBruto - imposto;
-                    const roi = (lucroLiquido / totalInvestido) * 100;
-                    totalROI += roi;
-                    countROI++;
-                }
-            }
-
-            return {
-                ...cliente,
-                roi_medio: countROI > 0 ? totalROI / countROI : 0
-            };
-        }));
-
-        res.json({ success: true, clientes: clientesComROI });
-    } catch (error) {
-        console.error('Erro ao listar clientes:', error);
-        res.status(500).json({ success: false, error: 'Erro ao listar clientes' });
-    }
-});
-
-// Criar novo cliente
-app.post('/api/clientes', isAuthenticated, async (req, res) => {
-    try {
-        const { nome, cpf, email, telefone, status, data_inicio, observacoes } = req.body;
-
-        if (!nome) {
-            return res.status(400).json({ success: false, error: 'Nome é obrigatório' });
-        }
-
-        const result = await db.run(`
-            INSERT INTO clientes(assessor_id, nome, cpf, email, telefone, status, data_inicio, observacoes)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-            req.session.userId,
-            nome,
-            cpf || null,
-            email || null,
-            telefone || null,
-            status || 'ativo',
-            data_inicio || new Date().toISOString().split('T')[0],
-            observacoes || null
-        ]);
-
-        const clienteId = result.lastID || result.stmt?.lastID;
-
-        res.json({ success: true, clienteId });
-    } catch (error) {
-        console.error('Erro ao criar cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao criar cliente' });
-    }
-});
-
-// Excluir cliente
-app.delete('/api/clientes/:id', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-
-        // Verificar se cliente existe e pertence ao usuário
-        const cliente = await db.get(
-            'SELECT id FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, error: 'Cliente não encontrado ou acesso negado' });
-        }
-
-        // Antes de excluir, desvincular imóveis para não perdê-los (caso cascade esteja ativo indesejadamente ou para garantir integridade)
-        await db.run('UPDATE carteira_imoveis SET cliente_id = NULL WHERE cliente_id = ?', [clienteId]);
-
-        // Excluir o cliente
-        await db.run('DELETE FROM clientes WHERE id = ?', [clienteId]);
-
-        res.json({ success: true, message: 'Cliente excluído com sucesso' });
-    } catch (error) {
-        console.error('Erro ao excluir cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao excluir cliente' });
-    }
-});
-
-// Obter detalhes de um cliente específico
-app.get('/api/clientes/:id', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-
-        const cliente = await db.get(
-            'SELECT * FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
-        }
-
-        res.json({ success: true, cliente });
-    } catch (error) {
-        console.error('Erro ao obter cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao obter cliente' });
-    }
-});
-
-// Atualizar cliente
-app.put('/api/clientes/:id', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-        const { nome, cpf, email, telefone, status, data_inicio, observacoes } = req.body;
-
-        // Verificar se o cliente pertence ao assessor
-        const cliente = await db.get(
-            'SELECT id FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
-        }
-
-        await db.run(`
-            UPDATE clientes 
-            SET nome = ?, cpf = ?, email = ?, telefone = ?, status = ?,
-    data_inicio = ?, observacoes = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-    `, [nome, cpf, email, telefone, status, data_inicio, observacoes, clienteId]);
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Erro ao atualizar cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao atualizar cliente' });
-    }
-});
-
-// Deletar cliente
-app.delete('/api/clientes/:id', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-
-        // Verificar se o cliente pertence ao assessor e pegar dados para liberar lead
-        const cliente = await db.get(
-            'SELECT * FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
-        }
-
-        // Verificar se há imóveis vinculados
-        const imoveis = await db.get(
-            'SELECT COUNT(*) as count FROM carteira_imoveis WHERE cliente_id = ?',
-            [clienteId]
-        );
-
-        if (imoveis.count > 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Não é possível deletar cliente com imóveis vinculados. Remova os imóveis primeiro.'
-            });
-        }
-
-        // Se este cliente veio de um lead (identificado pelo telefone), devolve o lead para a piscina ('novo')
-        if (cliente.telefone) {
-            await db.run(`
-                UPDATE leads 
-                SET status = 'novo', claimed_by = NULL 
-                WHERE whatsapp = ? AND claimed_by = ?
-    `, [cliente.telefone, req.session.userId]);
-        }
-
-        await db.run('DELETE FROM clientes WHERE id = ?', [clienteId]);
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Erro ao deletar cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao deletar cliente' });
-    }
-});
-
-// Deletar imóvel da carteira
-app.delete('/api/carteira/:id', isAuthenticated, async (req, res) => {
-    try {
-        const imovelId = req.params.id;
-
-        // Verificar se o imóvel pertence a um cliente do assessor
-        const imovel = await db.get(`
-            SELECT ci.id 
-            FROM carteira_imoveis ci
-            JOIN clientes c ON ci.cliente_id = c.id
-            WHERE ci.id = ? AND c.assessor_id = ?
-    `, [imovelId, req.session.userId]);
-
-        // Fallback: verificar se pertence diretamente ao assessor (caso legado ou sem cliente)
-        const imovelDireto = await db.get(
-            'SELECT id FROM carteira_imoveis WHERE id = ? AND user_id = ?',
-            [imovelId, req.session.userId]
-        );
-
-        if (!imovel && !imovelDireto) {
-            return res.status(404).json({ success: false, error: 'Imóvel não encontrado ou acesso negado' });
-        }
-
-        // Deletar custos associados (se houver)
-        await db.run('DELETE FROM carteira_custos WHERE imovel_id = ?', [imovelId]);
-
-        // Deletar imóvel
-        await db.run('DELETE FROM carteira_imoveis WHERE id = ?', [imovelId]);
-
-        res.json({ success: true, message: 'Imóvel excluído com sucesso' });
-    } catch (error) {
-        console.error('Erro ao excluir imóvel:', error);
-        res.status(500).json({ success: false, error: 'Erro ao excluir imóvel' });
-    }
-});
-
-// Dashboard do cliente específico
-app.get('/api/clientes/:id/dashboard', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-
-        // Verificar se o cliente pertence ao assessor
-        const cliente = await db.get(
-            'SELECT * FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
-        }
-
-        // Buscar imóveis do cliente
-        const imoveis = await db.all(
-            'SELECT * FROM carteira_imoveis WHERE cliente_id = ?',
-            [clienteId]
-        );
-
-        // Calcular KPIs
-        let totalInvestido = 0;
-        let totalLucroEstimado = 0;
-        let totalROI = 0;
-        let countROI = 0;
-        let custosMensaisRecorrentes = 0;
-
-        for (const imovel of imoveis) {
-            const custos = await db.all(
-                'SELECT SUM(valor) as total FROM carteira_custos WHERE imovel_id = ?',
-                [imovel.id]
-            );
-            const totalCustos = custos[0]?.total || 0;
-            const investidoImovel = (imovel.valor_compra || 0) + totalCustos;
-            totalInvestido += investidoImovel;
-
-            // Priorizar valores salvos no banco (lucro_estimado e roi_estimado)
-            let lucroLiquido = 0;
-            let roi = 0;
-
-            if (imovel.lucro_estimado !== null && imovel.lucro_estimado !== undefined && imovel.lucro_estimado !== 0) {
-                // Usar valor salvo do banco
-                lucroLiquido = imovel.lucro_estimado;
-                totalLucroEstimado += lucroLiquido;
-            } else {
-                // Fallback: calcular manualmente se não houver valor salvo
-                const valorVenda = imovel.valor_venda_estimado || 0;
-                if (valorVenda > 0) {
-                    const corretagem = valorVenda * 0.06;
-                    const lucroBruto = valorVenda - corretagem - investidoImovel;
-                    const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-                    lucroLiquido = lucroBruto - imposto;
-                    totalLucroEstimado += lucroLiquido;
-                }
-            }
-
-            // ROI: priorizar valor salvo
-            if (imovel.roi_estimado !== null && imovel.roi_estimado !== undefined && imovel.roi_estimado !== 0) {
-                roi = imovel.roi_estimado;
-                totalROI += roi;
-                countROI++;
-            } else if (investidoImovel > 0 && lucroLiquido !== 0) {
-                // Fallback: calcular ROI manualmente
-                roi = (lucroLiquido / investidoImovel) * 100;
-                totalROI += roi;
-                countROI++;
-            }
-
-            // Custos mensais recorrentes
-            custosMensaisRecorrentes += (imovel.condominio_estimado || 0) + (imovel.iptu_estimado || 0);
-        }
-
-        const kpis = {
-            totalInvestido,
-            totalLucroEstimado,
-            roiMedio: countROI > 0 ? totalROI / countROI : 0,
-            totalImoveis: imoveis.length,
-            custosMensaisRecorrentes
-        };
-
-        res.json({ success: true, cliente, kpis, imoveis });
-    } catch (error) {
-        console.error('Erro ao obter dashboard do cliente:', error);
-        res.status(500).json({ success: false, error: 'Erro ao obter dashboard' });
-    }
-});
+// Rota de Carteira Modularizada
+app.use('/', (await import('./routes/carteira.js')).default);
 
 // ========================================
-// ROTAS DE CARTEIRA (MODIFICADAS)
-// ========================================
+// Rota de Leads e Financeiro Modularizada
+app.use('/', (await import('./routes/financeiro_leads.js')).default);
 
-// Página da carteira (dashboard) - Server-Side Rendering
 
-app.get('/carteira', isAuthenticated, async (req, res) => {
-    try {
-        // Buscar todos os clientes do assessor com estatísticas
-        const clientes = await db.all(`
-            SELECT
-c.*,
-    COUNT(DISTINCT ci.id) as total_imoveis,
-    COALESCE(SUM(ci.valor_compra), 0) as total_investido
-            FROM clientes c
-            LEFT JOIN carteira_imoveis ci ON c.id = ci.cliente_id
-            WHERE c.assessor_id = ?
-    GROUP BY c.id
-            ORDER BY c.created_at DESC
-    `, [req.session.userId]);
-
-        // Calcular KPIs consolidados de todos os clientes
-        let totalImoveisGeral = 0;
-        let totalClientesAtivos = 0;
-        let clientesComImoveis = 0;
-        let novosClientesMes = 0;
-        let totalROI = 0;
-        let countROI = 0;
-        let totalInvestidoPorCliente = 0;
-
-        // Data de 30 dias atrás
-        const dataLimite = new Date();
-        dataLimite.setDate(dataLimite.getDate() - 30);
-
-        for (const cliente of clientes) {
-            if (cliente.status === 'ativo') totalClientesAtivos++;
-
-            // Contar novos clientes no último mês
-            const dataInicio = new Date(cliente.data_inicio || cliente.created_at);
-            if (dataInicio >= dataLimite) {
-                novosClientesMes++;
-            }
-
-            const imoveis = await db.all(
-                'SELECT * FROM carteira_imoveis WHERE cliente_id = ?',
-                [cliente.id]
-            );
-
-            if (imoveis.length > 0) {
-                clientesComImoveis++;
-            }
-
-            totalImoveisGeral += imoveis.length;
-
-            let totalInvestidoCliente = 0;
-            let totalLucroCliente = 0;
-            let totalROICliente = 0;
-            let countROICliente = 0;
-
-            for (const imovel of imoveis) {
-                const custos = await db.all(
-                    'SELECT SUM(valor) as total FROM carteira_custos WHERE imovel_id = ?',
-                    [imovel.id]
-                );
-                const totalCustos = custos[0]?.total || 0;
-                const investidoImovel = (imovel.valor_compra || 0) + totalCustos;
-                totalInvestidoCliente += investidoImovel;
-
-                const valorVenda = imovel.valor_venda_estimado || 0;
-                if (valorVenda > 0 && investidoImovel > 0) {
-                    const corretagem = valorVenda * 0.06;
-                    const lucroBruto = valorVenda - corretagem - investidoImovel;
-                    const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-                    const lucroLiquido = lucroBruto - imposto;
-                    const roi = (lucroLiquido / investidoImovel) * 100;
-
-                    // Global Aggregation
-                    totalROI += roi;
-                    countROI++;
-
-                    // Client Aggregation
-                    totalLucroCliente += lucroLiquido;
-                    totalROICliente += roi;
-                    countROICliente++;
-                }
-            }
-
-            if (totalInvestidoCliente > 0) {
-                totalInvestidoPorCliente += totalInvestidoCliente;
-            }
-
-            // Attach metrics to client object for the view
-            cliente.total_investido_real = totalInvestidoCliente;
-            cliente.lucro_estimado = totalLucroCliente;
-            cliente.roi_medio = countROICliente > 0 ? (totalROICliente / countROICliente) : 0;
-        }
-
-        const kpisGerais = {
-            totalClientes: clientes.length,
-            totalClientesAtivos,
-            totalImoveis: totalImoveisGeral,
-            clientesComImoveis,
-            novosClientesMes,
-            roiMedioGeral: countROI > 0 ? totalROI / countROI : 0,
-            ticketMedio: clientesComImoveis > 0 ? totalInvestidoPorCliente / clientesComImoveis : 0
-        };
-
-        res.render('carteira', {
-            user: getUserContext(req.session),
-            clientes: clientes,
-            kpis: kpisGerais
-        });
-
-    } catch (err) {
-        console.error('Erro ao carregar dashboard de clientes:', err);
-        res.status(500).send('Erro ao carregar dashboard de clientes.');
-    }
-});
-
-// Nova rota: Carteira individual do cliente
-app.get('/cliente/:id', isAuthenticated, async (req, res) => {
-    try {
-        const clienteId = req.params.id;
-
-        // Verificar se o cliente pertence ao assessor
-        const cliente = await db.get(
-            'SELECT * FROM clientes WHERE id = ? AND assessor_id = ?',
-            [clienteId, req.session.userId]
-        );
-
-        if (!cliente) {
-            return res.status(404).send('Cliente não encontrado');
-        }
-
-        // Buscar imóveis do cliente
-        const imoveis = await db.all(
-            'SELECT * FROM carteira_imoveis WHERE cliente_id = ? ORDER BY data_aquisicao DESC',
-            [clienteId]
-        );
-
-        // Calcular KPIs do cliente
-        let totalInvestido = 0;
-        let totalLucroEstimado = 0;
-        let totalROI = 0;
-        let countROI = 0;
-        let custosMensaisRecorrentes = 0;
-
-        const imoveisComDetalhes = [];
-
-        for (const imovel of imoveis) {
-            const custos = await db.all(
-                'SELECT * FROM carteira_custos WHERE imovel_id = ? ORDER BY data_custo DESC',
-                [imovel.id]
-            );
-            const totalCustos = custos.reduce((sum, c) => sum + (c.valor || 0), 0);
-            const investidoImovel = (imovel.valor_compra || 0) + totalCustos;
-            totalInvestido += investidoImovel;
-
-            let lucroLiquido = 0;
-            let roi = 0;
-
-            // Priorizar valores salvos no banco
-            if (imovel.lucro_estimado !== null && imovel.lucro_estimado !== undefined && imovel.lucro_estimado !== 0) {
-                lucroLiquido = imovel.lucro_estimado;
-                totalLucroEstimado += lucroLiquido;
-            } else {
-                // Fallback: calcular manualmente
-                const valorVenda = imovel.valor_venda_estimado || 0;
-                if (valorVenda > 0) {
-                    const corretagem = valorVenda * 0.06;
-                    const lucroBruto = valorVenda - corretagem - investidoImovel;
-                    const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-                    lucroLiquido = lucroBruto - imposto;
-                    totalLucroEstimado += lucroLiquido;
-                }
-            }
-
-            // ROI: priorizar valor salvo
-            if (imovel.roi_estimado !== null && imovel.roi_estimado !== undefined && imovel.roi_estimado !== 0) {
-                roi = imovel.roi_estimado;
-                totalROI += roi;
-                countROI++;
-            } else if (investidoImovel > 0 && lucroLiquido !== 0) {
-                roi = (lucroLiquido / investidoImovel) * 100;
-                totalROI += roi;
-                countROI++;
-            }
-
-            // Custos mensais recorrentes
-            const custosMensais = (imovel.condominio_estimado || 0) + (imovel.iptu_estimado || 0);
-            custosMensaisRecorrentes += custosMensais;
-
-            imoveisComDetalhes.push({
-                ...imovel,
-                totalCustos,
-                totalInvestido: investidoImovel,
-                lucroLiquido,
-                roi,
-                custosMensais
-            });
-        }
-
-        // Buscar histórico de custos mensais
-        const custosPorMes = await db.all(`
-SELECT
-strftime('%Y-%m', cc.data_custo) as mes,
-    SUM(cc.valor) as total
-            FROM carteira_custos cc
-            INNER JOIN carteira_imoveis ci ON cc.imovel_id = ci.id
-            WHERE ci.cliente_id = ?
-    GROUP BY mes
-            ORDER BY mes DESC
-            LIMIT 12
-        `, [clienteId]);
-
-        const kpis = {
-            totalInvestido,
-            totalLucroEstimado,
-            roiMedio: countROI > 0 ? totalROI / countROI : 0,
-            totalImoveis: imoveis.length,
-            custosMensaisRecorrentes
-        };
-
-        res.render('cliente-detalhes', {
-            user: {
-                username: req.session.username,
-                profile_pic_url: req.session.profile_pic_url
-            },
-            cliente: cliente,
-            imoveis: imoveisComDetalhes,
-            kpis: kpis,
-            custosPorMes: custosPorMes
-        });
-
-    } catch (err) {
-        console.error('Erro ao carregar carteira do cliente:', err);
-        res.status(500).send('Erro ao carregar carteira do cliente.');
-    }
-});
-
-// Rota para página de detalhes do imóvel
-app.get('/carteira/:id', isAuthenticated, async (req, res) => {
-    try {
-        const imovelId = req.params.id;
-
-        // Buscar dados do imóvel
-        const imovel = await db.get(
-            'SELECT * FROM carteira_imoveis WHERE id = ? AND user_id = ?',
-            [imovelId, req.session.userId]
-        );
-
-        if (!imovel) {
-            return res.status(404).send('Imóvel não encontrado');
-        }
-
-        // Buscar custos do imóvel
-        const custos = await db.all(
-            'SELECT * FROM carteira_custos WHERE imovel_id = ? ORDER BY data_custo DESC',
-            [imovelId]
-        );
-
-        // Buscar cliente associado ao imóvel (se houver)
-        let cliente = null;
-        if (imovel.cliente_id) {
-            cliente = await db.get(
-                'SELECT id, nome FROM clientes WHERE id = ? AND assessor_id = ?',
-                [imovel.cliente_id, req.session.userId]
-            );
-        }
-
-        // Calcular totais
-        const totalCustos = custos.reduce((sum, c) => sum + (c.valor || 0), 0);
-        const totalInvestido = (imovel.valor_compra || 0) + totalCustos;
-
-        // Cálculo de Lucro Líquido (Padronizado)
-        const valorVenda = imovel.valor_venda_estimado || 0;
-        let lucroLiquido = 0;
-        let roi = 0;
-
-        if (valorVenda > 0) {
-            const corretagem = valorVenda * 0.06;
-            const lucroBruto = valorVenda - corretagem - totalInvestido;
-            const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-            lucroLiquido = lucroBruto - imposto;
-
-            roi = totalInvestido > 0 ? (lucroLiquido / totalInvestido) * 100 : 0;
-        }
-
-        res.render('imovel-detalhes', {
-            user: {
-                username: req.session.username,
-                profile_pic_url: req.session.profile_pic_url
-            },
-            imovel: imovel,
-            cliente: cliente, // Adiciona cliente ao contexto
-            custos: custos,
-            totais: {
-                custos: totalCustos,
-                investido: totalInvestido,
-                lucro: lucroLiquido,
-                roi: roi
-            }
-        });
-
-    } catch (err) {
-        console.error('Erro ao carregar detalhes do imóvel:', err);
-        res.status(500).send('Erro ao carregar detalhes do imóvel.');
-    }
-});
-
-
-
-// Rota para editar imóvel da carteira
-app.get('/carteira/edit/:id', isAuthenticated, async (req, res) => {
-    try {
-        const imovel = await db.get('SELECT * FROM carteira_imoveis WHERE id = ? AND user_id = ?', [req.params.id, req.session.userId]);
-        if (!imovel) {
-            return res.status(404).send("Imóvel não encontrado.");
-        }
-        res.render('editar-imovel', {
-            imovel: imovel,
-            user: {
-                username: req.session.username,
-                profile_pic_url: req.session.profile_pic_url
-            }
-        });
-    } catch (error) {
-        console.error('Erro ao carregar imóvel para edição:', error);
-        res.status(500).send("Erro ao carregar página de edição.");
-    }
-});
-
-app.post('/carteira/edit/:id', isAuthenticated, async (req, res) => {
-    const { descricao, endereco, status, valor_compra, valor_venda_estimado, data_aquisicao, observacoes, condominio_estimado, iptu_estimado } = req.body;
-
-    // Helper para extrair números de strings formatadas (pt-BR) ou números puros
-    const parseMonetary = (val) => {
-        if (val === null || val === undefined || val === '') return 0;
-        if (typeof val === 'number') return val;
-
-        const strVal = val.toString().trim();
-
-        // Se tiver vírgula, assume formato BRL (Ex: "1.000,00" ou "10,50")
-        if (strVal.includes(',')) {
-            const clean = strVal.replace(/[^\d,-]/g, '');
-            return parseFloat(clean.replace(',', '.')) || 0;
-        }
-
-        // Se NÃO tiver vírgula, assume formato Standard/US (Ex: "1000.00")
-        const clean = strVal.replace(/[^\d.-]/g, '');
-        return parseFloat(clean) || 0;
-    };
-
-    try {
-        // Buscar custos existentes para cálculo preciso
-        const custos = await db.all('SELECT valor FROM carteira_custos WHERE imovel_id = ?', [req.params.id]);
-        const totalCustos = custos.reduce((sum, c) => sum + (c.valor || 0), 0);
-
-        const vCompra = parseMonetary(valor_compra);
-        const vVenda = parseMonetary(valor_venda_estimado);
-        const investimentoTotal = vCompra + totalCustos;
-
-        let lucroEstimado = 0;
-        let roiEstimado = 0;
-
-        if (vVenda > 0) {
-            const corretagem = vVenda * 0.06;
-            const lucroBruto = vVenda - corretagem - investimentoTotal;
-            const imposto = lucroBruto > 0 ? lucroBruto * 0.15 : 0;
-            lucroEstimado = lucroBruto - imposto;
-
-            if (investimentoTotal > 0) {
-                roiEstimado = (lucroEstimado / investimentoTotal) * 100;
-            }
-        }
-
-        await db.run(
-            `UPDATE carteira_imoveis 
-             SET descricao = ?, endereco = ?, status = ?, valor_compra = ?, valor_venda_estimado = ?, data_aquisicao = ?, observacoes = ?, condominio_estimado = ?, iptu_estimado = ?, lucro_estimado = ?, roi_estimado = ?
-    WHERE id = ? AND user_id = ? `,
-            [
-                descricao,
-                endereco,
-                status,
-                vCompra, // Usar valor parseado
-                vVenda,  // Usar valor parseado
-                data_aquisicao,
-                observacoes,
-                parseMonetary(condominio_estimado),
-                parseMonetary(iptu_estimado),
-                lucroEstimado,
-                roiEstimado,
-                req.params.id,
-                req.session.userId
-            ]
-        );
-        res.redirect(`/ carteira / ${req.params.id} `);
-    } catch (error) {
-        console.error('Erro ao atualizar imóvel:', error);
-        res.status(500).send("Erro ao salvar alterações.");
-    }
-});
-
-// --- DEBUG ROUTE (Temporary) ---
-app.get('/debug/force-heal', isAuthenticated, async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const imoveis = await db.all('SELECT * FROM carteira_imoveis WHERE user_id = ?', [userId]);
-        const savedCalcs = await db.all('SELECT * FROM saved_calculations WHERE user_id = ?', [userId]);
-        const arremates = await db.all('SELECT * FROM arremates WHERE user_id = ?', [userId]);
-
-        let logs = [];
-        logs.push(`Found ${imoveis.length} imoveis, ${savedCalcs.length} saved calcs, ${arremates.length} arremates.`);
-
-        for (let imovel of imoveis) {
-            logs.push(`Checking Imovel ${imovel.id} (${imovel.descricao})...Venda: ${imovel.valor_venda_estimado}, Cond: ${imovel.condominio_estimado} `);
-
-            // Level 1: Arremates
-            const arremate = arremates.find(a => a.descricao_imovel === imovel.descricao);
-            if (arremate) {
-                logs.push(`  -> Found Arremate Match(L1): ID ${arremate.id}.Venda: ${arremate.calc_valor_venda} `);
-                if (arremate.calc_valor_venda > 0) {
-                    await db.run('UPDATE carteira_imoveis SET valor_venda_estimado = ? WHERE id = ?', [arremate.calc_valor_venda, imovel.id]);
-                    logs.push(`  -> UPDATED Venda from Arremate.`);
-                }
-            } else {
-                logs.push(`  -> No Arremate match for description '${imovel.descricao}'`);
-            }
-
-            // Level 2: Saved Calcs
-            const match = savedCalcs.find(sc => {
-                const data = JSON.parse(sc.data);
-                return Math.abs(parseFloat(data.valorArrematado) - imovel.valor_compra) < 1.0;
-            });
-
-            if (match) {
-                const data = JSON.parse(match.data);
-                logs.push(`  -> Found SavedCalc Match(L2): ID ${match.id}.Venda: ${data.valorVendaFinal}, Cond: ${data.condominioMensal} `);
-
-                await db.run('UPDATE carteira_imoveis SET valor_venda_estimado = ?, condominio_estimado = ?, iptu_estimado = ? WHERE id = ?',
-                    [parseFloat(data.valorVendaFinal) || imovel.valor_venda_estimado,
-                    parseFloat(data.condominioMensal) || imovel.condominio_estimado || 0,
-                    (parseFloat(data.iptuMensal) || (parseFloat(data.iptuAnual) / 12)) || imovel.iptu_estimado || 0,
-                    imovel.id]
-                );
-                logs.push(`  -> UPDATED Metrics from SavedCalc.`);
-            } else {
-                logs.push(`  -> No SavedCalc match for value ${imovel.valor_compra}`);
-            }
-        }
-        res.json({ logs });
-    } catch (e) {
-        res.status(500).json({ error: e.message, stack: e.stack });
-    }
-});
-
-// --- NOVAS ROTAS DA API DA CARTEIRA ---
-
-// Dashboard Data (KPIs e Gráficos)
-app.get('/api/portfolio/dashboard', isAuthenticated, async (req, res) => {
-    try {
-        const { imoveis, kpis, custosPorMes } = await getPortfolioData(req.session.userId);
-
-        // Structure the response to match what the client expects
-        // Client expects { ...kpis, custosPorMes: [], distribuicaoCustos: [] }
-
-        // Fetch distribution separately as it (currently) wasn't in the helper but is needed here
-        // Or we add it to the helper. For now let's keep it here or add to helper.
-        // Let's add it here to keep helper focused on "Core Data".
-        // Actually, the client uses `distribuicaoCustos`.
-
-        const distribuicaoCustos = await db.all(`
-            SELECT tipo_custo, SUM(valor) as total
-            FROM carteira_custos
-            WHERE user_id = ?
-    GROUP BY tipo_custo
-        `, [req.session.userId]);
-
-        res.json({
-            ...kpis,
-            distribuicaoCustos,
-            custosPorMes
-        });
-    } catch (err) {
-        console.error('Erro no dashboard:', err);
-        res.status(500).json({ error: 'Erro ao carregar dashboard' });
-    }
-});
-
-
-// Listar todos os imóveis do portfólio
-// Helper: Consolidated Portfolio Data Fetching & Healing
-// (Already defined above)
-
-// ========================================
-// FUNIL DE VENDAS (LEAD GENERATION)
-// ========================================
-
-// Rota Pública do Funil
-app.get('/start', (req, res) => {
-    res.render('funnel');
-});
-
-// Processamento do Lead (API)
-app.post('/api/leads/submit', async (req, res) => {
-    try {
-        const { nome, whatsapp, objetivo, experiencia, restricao_nome, capital_disponivel, preferencia_pgto, estado, cidade, interesse } = req.body;
-
-        // --- Advanced Credit Score Algorithm (Bank Grade) ---
-        // Desenvolvido para qualificar leads com precisão bancária
-        let score = 0;
-        const capital = parseFloat(capital_disponivel || 0);
-        const isCash = preferencia_pgto === 'vista';
-        const isRestricted = restricao_nome === 'true'; // Vem como string 'true'/'false' do form
-        const hasExperience = experiencia === 'ja_arrematei';
-
-        // 1. Capacidade Financeira (Peso: 50%) - O Fator mais crítico
-        if (capital >= 1000000) score += 50;      // Whale (Baleia) - Atendimento VIP Imediato
-        else if (capital >= 500000) score += 40;  // High Net Worth
-        else if (capital >= 200000) score += 30;  // Standard Gold
-        else if (capital >= 100000) score += 20;  // Entry Level
-        else if (capital >= 50000) score += 10;   // Minimal Viable
-
-        // 2. Perfil de Liquidez (Peso: 20%) - Velocidade de Fechamento
-        if (isCash) {
-            score += 20; // Cash is King - Sem dependência de bancos
-        } else {
-            // Financiado: Ciclo de venda 3x mais longo + Risco de reprovação
-            score += 5;
-        }
-
-        // 3. Maturidade do Investidor (Peso: 20%) - Qualidade da Conversa
-        if (hasExperience) {
-            score += 20; // Já arrematou: Entende o processo, não precisa ser "educado"
-        } else if (objetivo === 'investir') {
-            score += 15; // Investidor racional: Decide por números
-        } else {
-            score += 5; // Moradia/Primeira vez: Compra emocional, muitas dúvidas
-        }
-
-        // 4. Qualidade dos Dados (Peso: 10%)
-        if (whatsapp && whatsapp.replace(/\D/g, '').length >= 10) score += 5;
-        if (estado && estado.length === 2 && cidade) score += 5;
-
-        // --- Penalidades de Risco (Lógica de Bureau) ---
-        if (isRestricted) {
-            if (isCash) {
-                // Se paga à vista, restrição importa pouco (apenas compliance/burocracia menor)
-                score -= 5;
-            } else {
-                // Se quer financiar com nome sujo, a chance de êxito é < 5%
-                // Penalidade severa para não iludir o time de vendas
-                score -= 40;
-            }
-        }
-
-        // Normalização (0 a 100)
-        score = Math.min(100, Math.max(0, score));
-
-        // Save to DB
-        // Capturar dados de rastreamento
-        const ip_address = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        const fingerprint = req.body.fingerprint || null;
-
-        await db.run(`
-        INSERT INTO leads(
-            nome, whatsapp, objetivo, experiencia, restricao_nome,
-            capital_entrada, preferencia_pgto, estado, cidade, interesse, score,
-            ip_address, fingerprint
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-            nome,
-            whatsapp,
-            objetivo,
-            experiencia || 'primeira_vez',
-            isRestricted ? 1 : 0,
-            capital_disponivel,
-            preferencia_pgto,
-            estado || '',
-            cidade || '',
-            interesse || 'nao_informado',
-            score,
-            ip_address,
-            fingerprint
-        ]);
-        res.json({ success: true, score: score });
-
-    } catch (error) {
-        console.error('Erro ao salvar lead:', error);
-        res.status(500).json({ success: false, error: 'Erro ao processar perfil.' });
-    }
-});
-
-// ========================================
-
-// ========================================
-// ÁREA DO ASSESSOR (LEADS POOL)
-// ========================================
-
-// Rota de Histórico de Distribuição de Leads (Admin)
-app.get('/admin/leads-history', isAuthenticated, async (req, res) => {
-    try {
-        const leads = await db.all(`
-SELECT
-l.*,
-    u.username as assessor_nome,
-    u.profile_pic_url as assessor_pic
-            FROM leads l 
-            LEFT JOIN users u ON l.claimed_by = u.id 
-            WHERE l.status != 'novo' 
-            ORDER BY l.updated_at DESC
-    `);
-
-        res.render('leads_history', {
-            leads,
-            user: { ...req.session, isAdmin: req.session.isAdmin },
-            username: req.session.username,
-            profile_pic_url: req.session.profile_pic_url
-        });
-    } catch (error) {
-        console.error('Erro ao carregar histórico de leads:', error);
-        res.status(500).send("Erro ao carregar histórico.");
-    }
-});
-
-// Listar Leads Disponíveis (Piscina)
-app.get('/leads', isAuthenticated, async (req, res) => {
-    try {
-        // Busca leads 'novos' ou 'desqualificados' (histórico)
-        // Ordena por Score (Melhores primeiro)
-        // Ordena por Score (Melhores primeiro)
-        // 1. Fetch leads 'novo'
-        const allLeads = await db.all(`
-SELECT * FROM leads 
-            WHERE status = 'novo' 
-            ORDER BY score DESC, created_at DESC
-        `);
-
-        // 2. Blacklist Logic
-        // Busca Histórico Completo (Telefone, Device/Fingerprint, IP) de leads antigos
-        const historyQuery = await db.all("SELECT whatsapp, fingerprint, ip_address FROM leads WHERE status != 'novo'");
-
-        // Normalização Robusta
-        const normalizePhone = (p) => {
-            if (!p) return '';
-            let s = String(p).replace(/\D/g, '');
-            if (s.startsWith('55') && s.length > 11) s = s.substring(2);
-            return s;
-        };
-
-        const knownPhones = new Set();
-        const knownFingerprints = new Set();
-        const knownIPs = new Set();
-
-        historyQuery.forEach(l => {
-            const n = normalizePhone(l.whatsapp);
-            if (n.length > 6) knownPhones.add(n);
-            if (l.fingerprint && l.fingerprint.length > 5) knownFingerprints.add(l.fingerprint);
-            if (l.ip_address && l.ip_address.length > 5) knownIPs.add(l.ip_address);
-        });
-
-        const validLeads = [];
-        const blacklistLeads = [];
-        const seenBatchPhones = new Set();
-        const seenBatchFingerprints = new Set();
-        const seenBatchIPs = new Set();
-
-        let blacklistValue = 0;
-
-        console.log(`🔎 Blacklist Check: Analisando ${allLeads.length} leads contra histórico de ${knownPhones.size} numeros, ${knownFingerprints.size} devices e ${knownIPs.size} IPs.`);
-
-        allLeads.forEach(lead => {
-            const rawPhone = lead.whatsapp;
-            const phone = normalizePhone(rawPhone);
-            const fingerprint = lead.fingerprint;
-            const ip = lead.ip_address;
-            const potentialValue = Math.max(parseFloat(lead.capital_entrada || 0), parseFloat(lead.capital_vista || 0));
-
-            let isDuplicate = false;
-            let reason = '';
-
-            // 1. Checagem de Telefone (Check Rígido - Único Identificador 100% Confiável)
-            // Telefone duplicado é SEMPRE blacklist, independente do score.
-            if (phone && phone.length > 6) {
-                if (knownPhones.has(phone)) { isDuplicate = true; reason = 'Telefone Histórico'; }
-                if (seenBatchPhones.has(phone)) { isDuplicate = true; reason = 'Telefone Duplicado (Lote)'; }
-                seenBatchPhones.add(phone);
-            }
-
-            // Regra VIP: Se o lead tem alto potencial (Score >= 70), ignoramos bloqueios "soft" (IP/Device).
-            const isVip = (lead.score >= 70);
-
-            /* 
-               ⚠️ FINGERPRINT DESATIVADO TEMPORARIAMENTE ⚠️
-               Motivo: O identificador de dispositivo estava gerando colisões (ex: "iPhone de Usuários Diferentes" sendo tratados como iguais),
-               bloqueando pessoas de IPs totalmente diferentes.
-               Apenas o bloqueio por IP e Telefone permanecem ativos.
-            */
-            /*
-            if (!isDuplicate && !isVip && fingerprint && fingerprint.length > 5) {
-                if (knownFingerprints.has(fingerprint)) { isDuplicate = true; reason = 'Mesmo Dispositivo (Histórico)'; }
-                if (seenBatchFingerprints.has(fingerprint)) { isDuplicate = true; reason = 'Mesmo Dispositivo (Lote)'; }
-                seenBatchFingerprints.add(fingerprint);
-            }
-            */
-
-            // 3. Checagem de IP (Mantido conforme solicitado)
-            if (!isDuplicate && !isVip && ip && ip.length > 5) {
-                if (knownIPs.has(ip)) { isDuplicate = true; reason = 'Mesmo IP (Histórico)'; }
-                if (seenBatchIPs.has(ip)) { isDuplicate = true; reason = 'Mesmo IP (Lote)'; }
-                seenBatchIPs.add(ip);
-            }
-
-            if (isDuplicate) {
-                lead.blacklist_reason = reason;
-                blacklistLeads.push(lead);
-                blacklistValue += potentialValue;
-            } else {
-                validLeads.push(lead);
-            }
-        });
-
-        // --- DETECÇÃO DE "ATENÇÃO" EM LEADS VÁLIDOS (NOVO MODELO) ---
-        // Objetivo: Mostrar o lead mais recente como PRINCIPAL e esconder seus duplicados dentro dele.
-        const cleanLeads = [];
-        const groupedLeadsMap = {}; // Key: IP/Fingerprint -> { mainLead: Lead, duplicates: [] }
-
-        // 1. Mapa de Frequência para Válidos
-        const ipFreq = {};
-        const fpFreq = {};
-
-        validLeads.forEach(l => {
-            if (l.ip_address && l.ip_address.length > 5) ipFreq[l.ip_address] = (ipFreq[l.ip_address] || 0) + 1;
-            if (l.fingerprint && l.fingerprint.length > 5) fpFreq[l.fingerprint] = (fpFreq[l.fingerprint] || 0) + 1;
-        });
-
-        // 2. Classificação e Agrupamento
-        // 2. Classificação e Agrupamento
-        // MUDANÇA CRÍTICA: O agrupamento agora é feito EXCLUSIVAMENTE pelo número de TELEFONE (WhatsApp).
-        // Motivo: Fingerprint e IP geram muitos falsos positivos (colisões) em redes móveis e navegadores in-app (Instagram/Facebook),
-        // agupando pessoas diferentes (nomes/contatos diferentes) no mesmo card.
-        // Se a pessoa usou o mesmo telefone, é 99.9% certeza que é a mesma pessoa.
-
-        // Mapa auxiliar para contagem de telefones
-        const phoneCounts = {};
-        validLeads.forEach(l => {
-            if (l.whatsapp) {
-                const p = l.whatsapp.replace(/\D/g, '');
-                phoneCounts[p] = (phoneCounts[p] || 0) + 1;
-            }
-        });
-
-        validLeads.forEach(lead => {
-            let groupKey = null;
-            let reason = null;
-
-            if (lead.whatsapp) {
-                const safePhone = lead.whatsapp.replace(/\D/g, '');
-                if (phoneCounts[safePhone] > 1) {
-                    groupKey = 'phone_' + safePhone;
-                    reason = 'Mesmo Telefone';
-                }
-            }
-
-            if (groupKey) {
-                if (!groupedLeadsMap[groupKey]) {
-                    groupedLeadsMap[groupKey] = {
-                        leads: [],
-                        reason: reason
-                    };
-                }
-                groupedLeadsMap[groupKey].leads.push(lead);
-            } else {
-                // Se o telefone é único na lista, é um lead único.
-                cleanLeads.push(lead);
-            }
-        });
-
-        // 3. Processar os Grupos -> Escolher o MELHOR lead para ser o "Rosto" do grupo
-        const leadsWithAttention = [];
-        Object.values(groupedLeadsMap).forEach(group => {
-            // Ordenar leads dentro do grupo para decidir quem é o PRINCIPAL
-            // Critério: Maior Score > Maior Capital > Mais Recente
-            group.leads.sort((a, b) => {
-                const scoreDiff = (b.score || 0) - (a.score || 0);
-                if (scoreDiff !== 0) return scoreDiff;
-
-                const capA = (a.capital_entrada || 0) + (a.capital_vista || 0);
-                const capB = (b.capital_entrada || 0) + (b.capital_vista || 0);
-                const capDiff = capB - capA;
-                if (capDiff !== 0) return capDiff;
-
-                return new Date(b.created_at) - new Date(a.created_at);
-            });
-
-            const mainLead = group.leads[0]; // O melhor lead representa o grupo
-            const duplicates = group.leads.slice(1); // Os outros ficam escondidos
-
-            if (duplicates.length > 0) {
-                mainLead.hasAttention = true;
-                mainLead.attentionReason = group.reason;
-                mainLead.duplicates = duplicates;
-                mainLead.duplicateCount = duplicates.length;
-            }
-
-            leadsWithAttention.push(mainLead);
-        });
-
-        // 4. Combinar e Ordenar a Lista GLOBAL
-        // Critério do Usuário: "Valores mais altos e potencial de compra primeiro"
-        const combinedLeads = [...cleanLeads, ...leadsWithAttention].sort((a, b) => {
-            // 1. Score (Qualidade do Lead)
-            const scoreDiff = (b.score || 0) - (a.score || 0);
-            if (scoreDiff !== 0) return scoreDiff;
-
-            // 2. Potencial Financeiro (Capital)
-            const capA = (a.capital_entrada || 0) + (a.capital_vista || 0);
-            const capB = (b.capital_entrada || 0) + (b.capital_vista || 0);
-            const capDiff = capB - capA;
-            if (capDiff !== 0) return capDiff;
-
-            // 3. Recência (Desempate)
-            return new Date(b.created_at) - new Date(a.created_at);
-        });
-        const groupedBlacklistMap = {};
-
-        blacklistLeads.forEach(lead => {
-            let groupKey = '';
-            let keyLabel = '';
-            let icon = '';
-
-            // Lógica Refinada de Agrupamento para Blacklist
-            // Evitar agrupar por IP para não criar "clusters fantasmas"
-
-            if (lead.blacklist_reason && lead.blacklist_reason.includes('Telefone')) {
-                groupKey = 'phone_' + normalizePhone(lead.whatsapp);
-                keyLabel = lead.whatsapp;
-                icon = 'fa-whatsapp';
-            } else if (lead.blacklist_reason && lead.blacklist_reason.includes('Dispositivo')) {
-                groupKey = 'fp_' + lead.fingerprint;
-                keyLabel = 'Dispositivo Repetido';
-                icon = 'fa-mobile-screen';
-            } else {
-                // Outros motivos (IP, Score Baixo, etc) tratamos como itens individuais 
-                // para não poluir a visualização com agrupamentos errados.
-                groupKey = 'unique_' + lead.id;
-                keyLabel = lead.nome || 'Lead Recusado';
-                icon = 'fa-ban';
-            }
-
-            if (!groupedBlacklistMap[groupKey]) {
-                groupedBlacklistMap[groupKey] = {
-                    id: groupKey,
-                    reason: lead.blacklist_reason,
-                    displayLabel: keyLabel,
-                    icon: icon,
-                    count: 0,
-                    totalPotencial: 0,
-                    leads: [],
-                    latestDate: lead.created_at
-                };
-            }
-
-            groupedBlacklistMap[groupKey].leads.push(lead);
-            groupedBlacklistMap[groupKey].count++;
-            const val = Math.max(parseFloat(lead.capital_entrada || 0), parseFloat(lead.capital_vista || 0));
-            groupedBlacklistMap[groupKey].totalPotencial += val;
-
-            if (new Date(lead.created_at) > new Date(groupedBlacklistMap[groupKey].latestDate)) {
-                groupedBlacklistMap[groupKey].latestDate = lead.created_at;
-            }
-        });
-
-        // Converter para array e ordenar blacklist (Maiores ofensores primeiro)
-        const groupedBlacklist = Object.values(groupedBlacklistMap).sort((a, b) => b.count - a.count);
-
-        console.log(`✅ Resultado: ${cleanLeads.length} Limpos + ${leadsWithAttention.length} Com Atenção | ${blacklistLeads.length} Recusados`);
-
-        // Calcular KPIs (Considerando TODOS os válidos)
-        let kpis = {
-            totalCapital: 0,
-            avgScore: 0,
-            totalLeads: validLeads.length, // Total real de leads válidos
-            attentionCount: validLeads.length - cleanLeads.length,
-            blacklistCount: blacklistLeads.length,
-            blacklistClusterCount: groupedBlacklist.length,
-            blacklistValue: blacklistValue,
-            qualityLabel: 'N/A'
-        };
-
-        if (validLeads.length > 0) {
-            kpis.totalCapital = validLeads.reduce((sum, l) => sum + (l.capital_entrada || 0), 0);
-            kpis.avgScore = Math.round(validLeads.reduce((sum, l) => sum + (l.score || 0), 0) / validLeads.length);
-
-            if (kpis.avgScore >= 75) kpis.qualityLabel = 'Excelente 🌟';
-            else if (kpis.avgScore >= 50) kpis.qualityLabel = 'Bom ✅';
-            else kpis.qualityLabel = 'Regular ⚠️';
-        }
-
-        // --- PAGINATION LOGIC ---
-        const page = parseInt(req.query.page) || 1;
-        const limit = 50; // Leads per page
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
-
-        const paginatedLeads = combinedLeads.slice(startIndex, endIndex);
-        const totalPages = Math.ceil(combinedLeads.length / limit);
-
-        res.render('leads-pool', {
-            leads: paginatedLeads, // Lista Híbrida Paginada
-            blacklist: groupedBlacklist,
-            rawBlacklist: blacklistLeads,
-            kpis: kpis,
-            pagination: {
-                current: page,
-                total: totalPages,
-                hasPrev: page > 1,
-                hasNext: page < totalPages
-            },
-            user: getUserContext(req.session),
-            username: req.session.username,
-            profile_pic_url: req.session.profile_pic_url
-        });
-    } catch (error) {
-        console.error('Erro ao listar leads:', error);
-        res.status(500).send("Erro ao carregar leads.");
-    }
-});
-
-// Puxar Lead (Claim)
-app.post('/api/leads/claim/:id', isAuthenticated, async (req, res) => {
-    try {
-        const leadId = req.params.id;
-        const advisorId = req.session.userId;
-
-        // 1. Verifica se o lead ainda está disponível
-        const lead = await db.get('SELECT * FROM leads WHERE id = ? AND status = "novo"', [leadId]);
-
-        if (!lead) {
-            return res.status(400).send('Lead não encontrado ou já assumido por outro assessor.');
-        }
-
-        // 2. Marca como 'contactado' na tabela leads e vincula ao assessor
-        await db.run('UPDATE leads SET status = ?, claimed_by = ? WHERE id = ?', ['contactado', advisorId, leadId]);
-
-        // 3. Cria automaticamente o registro na tabela 'clientes' do assessor
-        await db.run(`
-            INSERT INTO clientes(
-    assessor_id, nome, email, telefone, status, data_inicio, observacoes
-) VALUES(?, ?, ?, ?, 'ativo', date('now'), ?)
-        `, [
-            advisorId,
-            lead.nome,
-            'email@pendente.com', // Placeholder 
-            lead.whatsapp,
-            `Lead vindo do Funil(Score: ${lead.score}).Objetivo: ${lead.objetivo}.Capital: ${(lead.capital_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} `
-        ]);
-
-        console.log(`✅ Assessor ${advisorId} puxou o lead ${leadId} (${lead.nome})`);
-        res.redirect('/leads'); // Recarrega a página
-
-    } catch (error) {
-        console.error('Erro ao puxar lead:', error);
-        res.status(500).send("Erro ao processar sua solicitação.");
-    }
-});
-
-// Rota API para buscar imóveis (consumida pelo front)
-app.get('/api/portfolio/imoveis', isAuthenticated, async (req, res) => {
-    try {
-        const { imoveis } = await getPortfolioData(req.session.userId);
-        res.json(imoveis);
-    } catch (err) {
-        console.error('Erro ao buscar imóveis:', err);
-        res.status(500).json({ error: 'Erro ao buscar imóveis' });
-    }
-});
-
-// Adicionar um novo imóvel
-app.post('/api/portfolio/imoveis', isAuthenticated, async (req, res) => {
-    try {
-        const { descricao, endereco, valor_compra, data_aquisicao, valor_venda_estimado, lucro_estimado, roi_estimado } = req.body;
-        if (!descricao) return res.status(400).json({ error: 'Descrição é obrigatória' });
-
-        const result = await db.run(
-            'INSERT INTO carteira_imoveis (user_id, descricao, endereco, valor_compra, data_aquisicao, valor_venda_estimado, lucro_estimado, roi_estimado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [req.session.userId, descricao, endereco, valor_compra || 0, data_aquisicao || null, valor_venda_estimado || 0, lucro_estimado || 0, roi_estimado || 0]
-        );
-        res.status(201).json({ id: result.lastID });
-    } catch (err) {
-        console.error('Erro ao adicionar imóvel:', err);
-        res.status(500).json({ error: 'Erro no servidor' });
-    }
-});
-
-// Obter detalhes de um imóvel específico (incluindo custos)
-app.get('/api/portfolio/imoveis/:id', isAuthenticated, async (req, res) => {
-    try {
-        const imovel = await db.get('SELECT * FROM carteira_imoveis WHERE id = ? AND user_id = ?', [req.params.id, req.session.userId]);
-        if (!imovel) return res.status(404).json({ error: 'Imóvel não encontrado' });
-
-        const custos = await db.all('SELECT * FROM carteira_custos WHERE imovel_id = ? ORDER BY data_custo DESC', [req.params.id]);
-        imovel.custos = custos;
-
-        res.json(imovel);
-    } catch (err) {
-        console.error('Erro ao buscar detalhes do imóvel:', err);
-        res.status(500).json({ error: 'Erro no servidor' });
-    }
-});
-
-// Adicionar um custo a um imóvel
-app.post('/api/portfolio/imoveis/:id/custos', isAuthenticated, async (req, res) => {
-    try {
-        const { tipo_custo, descricao, valor, data_custo } = req.body;
-        console.log(`📝 Recebendo novo custo: Imóvel = ${req.params.id}, Tipo = ${tipo_custo}, Valor = ${valor}, Data = ${data_custo} `);
-        if (!tipo_custo || !valor) return res.status(400).json({ error: 'Tipo e valor do custo são obrigatórios' });
-
-        const today = new Date().toISOString().split('T')[0];
-        const result = await db.run(
-            'INSERT INTO carteira_custos (imovel_id, user_id, tipo_custo, descricao, valor, data_custo) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.params.id, req.session.userId, tipo_custo, descricao, valor, data_custo || today]
-        );
-        res.status(201).json({ id: result.lastID });
-    } catch (err) {
-        console.error('Erro ao adicionar custo:', err);
-        res.status(500).json({ error: 'Erro no servidor' });
-    }
-});
-
-// Deletar um custo
-app.delete('/api/portfolio/custos/:id', isAuthenticated, async (req, res) => {
-    try {
-        // Garante que o custo pertence ao usuário logado
-        const custo = await db.get('SELECT id FROM carteira_custos WHERE id = ? AND user_id = ?', [req.params.id, req.session.userId]);
-        if (!custo) return res.status(404).json({ error: 'Custo não encontrado' });
-
-        await db.run('DELETE FROM carteira_custos WHERE id = ?', [req.params.id]);
-        res.json({ ok: true });
-    } catch (err) {
-        console.error('Erro ao deletar custo:', err);
-        res.status(500).json({ error: 'Erro no servidor' });
-    }
-});
-
-// Lançar custos mensais (Condomínio + IPTU) para o mês atual
-app.post('/api/portfolio/imoveis/:id/lancar-mensais', isAuthenticated, async (req, res) => {
-    try {
-        const imovelId = req.params.id;
-        const imovel = await db.get('SELECT * FROM carteira_imoveis WHERE id = ? AND user_id = ?', [imovelId, req.session.userId]);
-
-        if (!imovel) return res.status(404).json({ error: 'Imóvel não encontrado' });
-
-        const today = new Date();
-        const dataCusto = today.toISOString().split('T')[0];
-        const mesAno = today.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-        const mesCapitalized = mesAno.charAt(0).toUpperCase() + mesAno.slice(1);
-
-        let added = 0;
-
-        // Lança Condomínio se houver estimativa
-        if (imovel.condominio_estimado > 0) {
-            await db.run(
-                'INSERT INTO carteira_custos (imovel_id, user_id, tipo_custo, descricao, valor, data_custo) VALUES (?, ?, ?, ?, ?, ?)',
-                [imovelId, req.session.userId, 'Condomínio', `Condomínio - ${mesCapitalized} `, imovel.condominio_estimado, dataCusto]
-            );
-            added++;
-        }
-
-        // Lança IPTU se houver estimativa
-        if (imovel.iptu_estimado > 0) {
-            await db.run(
-                'INSERT INTO carteira_custos (imovel_id, user_id, tipo_custo, descricao, valor, data_custo) VALUES (?, ?, ?, ?, ?, ?)',
-                [imovelId, req.session.userId, 'Impostos', `IPTU - ${mesCapitalized} `, imovel.iptu_estimado, dataCusto]
-            );
-            added++;
-        }
-
-        if (added > 0) {
-            res.json({ success: true, message: `${added} custos lançados com sucesso.` });
-        } else {
-            res.status(400).json({ error: 'Nenhum valor estimado configurado para este imóvel.' });
-        }
-
-    } catch (err) {
-        console.error('Erro ao lançar custos mensais:', err);
-        res.status(500).json({ error: 'Erro no servidor' });
-    }
-});
-
-// API para dados do Dashboard
-// --- ROTAS DE GERENCIAMENTO DE COMISSÕES ---
-
-// 1. Admin: Alterar taxa padrão de mineração
-app.post('/api/admin/config/mining-fee', isAuthenticated, async (req, res) => {
-    if (!req.session.isAdmin) return res.status(403).json({ error: 'Apenas admin' });
-    const { fee } = req.body;
-    await db.run("UPDATE system_settings SET value = ? WHERE key = 'default_mining_fee'", [fee]);
-    res.json({ success: true });
-});
-
-app.get('/api/admin/config/mining-fee', isAuthenticated, async (req, res) => {
-    const s = await db.get("SELECT value FROM system_settings WHERE key = 'default_mining_fee'");
-    res.json({ fee: s?.value || 500 });
-});
-
-// 2. Assessor: Ver minhas comissões (Receber e Pagar?)
-// Foco no "Receber" (Minerações que eu fiz e outros venderam)
-app.get('/api/financeiro/minhas-mineracoes', isAuthenticated, async (req, res) => {
-    try {
-        const rows = await db.all(`
-            SELECT c.*, u.username as vendedor, i.descricao as imovel_desc,
-    strftime('%d/%m/%Y', c.data_geracao) as data_fmt
-            FROM comissoes_mineracao c
-            JOIN users u ON c.assessor_venda_id = u.id
-            JOIN carteira_imoveis i ON c.imovel_id = i.id
-            WHERE c.minerador_id = ?
-    ORDER BY c.data_geracao DESC
-        `, [req.session.userId]);
-
-        let totalRecebido = 0;
-        let totalReceber = 0;
-        rows.forEach(r => {
-            if (r.status === 'pago') totalRecebido += r.valor;
-            else totalReceber += r.valor;
-        });
-
-        res.json({ rows, totalRecebido, totalReceber });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Erro' });
-    }
-});
-
-// 3. Marcar como pago (O próprio minerador confirma que recebeu)
-app.post('/api/financeiro/confirmar-pagamento/:id', isAuthenticated, async (req, res) => {
-    try {
-        // Verifica se pertence ao usuario
-        const comissao = await db.get('SELECT * FROM comissoes_mineracao WHERE id = ? AND minerador_id = ?', [req.params.id, req.session.userId]);
-        if (!comissao) return res.status(404).json({ error: 'Não encontrado' });
-
-        await db.run("UPDATE comissoes_mineracao SET status = 'pago', data_pagamento = CURRENT_TIMESTAMP WHERE id = ?", [req.params.id]);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// 4. Endpoint para "Arrematar" direto da oportunidade (Gera Carteira + Comissão Linkada)
-// 4. Endpoint para "Arrematar" direto da oportunidade (Entra na carteira como "Em Andamento")
-app.post('/api/oportunidades/:id/arrematar', isAuthenticated, async (req, res) => {
-    try {
-        const op = await db.get('SELECT * FROM oportunidades WHERE id = ?', [req.params.id]);
-        if (!op) return res.status(404).json({ error: 'Op não encontrada' });
-
-        const { cliente_id } = req.body;
-
-        // Inserir na carteira do usuario logado (quem 'pegou' a oportunidade)
-        // Status inicial: 'Em Andamento'
-        // Salva quem minerou (op.user_id) em minerador_original_id
-        await db.run(`
-            INSERT INTO carteira_imoveis(
-            user_id, descricao, endereco, valor_compra, valor_venda_estimado,
-            status, lucro_estimado, roi_estimado, data_aquisicao, minerador_original_id, cliente_id
-        )
-VALUES(?, ?, ?, ?, ?, 'Em Andamento', ?, ?, ?, ?, ?)
-        `, [
-            req.session.userId,
-            op.titulo,
-            (op.cidade + ' - ' + op.estado),
-            op.valor_arremate,
-            op.valor_venda,
-            op.lucro_estimado,
-            op.roi_estimado,
-            new Date().toISOString().split('T')[0],
-            op.user_id, // Salva ID do minerador para pagar depois
-            cliente_id || null // Add client ID if provided
-        ]);
-
-        // Marcar OP como 'reservada' ou 'vendido'
-        await db.run("UPDATE oportunidades SET status = 'vendido' WHERE id = ?", [op.id]);
-
-        res.json({ success: true, message: 'Imóvel adicionado à carteira do cliente como "Em Andamento".' });
-
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Erro ao processar' });
-    }
-});
-
-// 5. Finalizar Arremate (Na Carteira) -> Gera Comissão
-app.post('/api/carteira/:id/finalizar-arremate', isAuthenticated, async (req, res) => {
-    try {
-        const imovel = await db.get('SELECT * FROM carteira_imoveis WHERE id = ? AND user_id = ?', [req.params.id, req.session.userId]);
-        if (!imovel) return res.status(404).json({ error: 'Imovel não encontrado' });
-
-        if (imovel.status === 'Arrematado') return res.status(400).json({ error: 'Já está arrematado' });
-
-        // Atualiza status local
-        await db.run("UPDATE carteira_imoveis SET status = 'Arrematado' WHERE id = ?", [req.params.id]);
-
-        // Verifica se tem comissão pendente (se tem minerador original e é diferente do dono atual)
-        if (imovel.minerador_original_id && imovel.minerador_original_id != req.session.userId) {
-
-            // Check se já existe comissão para este imóvel (evitar duplos cliques)
-            const exists = await db.get('SELECT id FROM comissoes_mineracao WHERE imovel_id = ?', [imovel.id]);
-
-            if (!exists) {
-                const feeSetting = await db.get("SELECT value FROM system_settings WHERE key = 'default_mining_fee'");
-                const feeValue = parseFloat(feeSetting?.value || 500);
-
-                await db.run(`INSERT INTO comissoes_mineracao(imovel_id, minerador_id, assessor_venda_id, valor, status)
-VALUES(?, ?, ?, ?, 'pendente')`,
-                    [imovel.id, imovel.minerador_original_id, req.session.userId, feeValue]);
-
-                console.log(`💰 Comissão Gerada(Finalização): R$${feeValue} para ${imovel.minerador_original_id} `);
-                return res.json({ success: true, message: 'Arremate confirmado e comissão gerada!' });
-            }
-        }
-
-        res.json({ success: true, message: 'Arremate confirmado!' });
-
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Erro ao finalizar' });
-    }
-});
-
-// Aplicar rate limiter em todas as rotas /api/*
-app.use('/api/', apiLimiter);
-
-
-
-// --- Middleware de Tratamento de Erros (deve ser o último middleware) ---
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    // Evita vazar detalhes do erro em produção
-    res.status(500).send('Ocorreu um erro inesperado no servidor.');
-});
-
-// --- Inicialização do Servidor ---
-(async () => {
-    // ensureTables runs via top-level await at line 473
-
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Servidor rodando em http://localhost:${PORT}`);
-    });
-})();
 // Rota para exportar leads como CSV
 app.get('/api/leads/export', isAuthenticated, async (req, res) => {
     try {
@@ -4264,3 +2463,44 @@ app.get('/api/leads/export', isAuthenticated, async (req, res) => {
         res.status(500).send('Erro ao gerar exportação.');
     }
 });
+
+// Aplicar rate limiter em todas as rotas /api/*
+app.use('/api/', apiLimiter);
+
+
+
+// --- Middleware de Tratamento de Erros (deve ser o último middleware) ---
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    // Evita vazar detalhes do erro em produção
+    res.status(500).send('Ocorreu um erro inesperado no servidor.');
+});
+
+// --- Inicialização do Servidor ---
+(async () => {
+    // ensureTables runs via top-level await at line 473
+
+    
+
+
+
+// Rota de Debug de Emergência
+app.get('/api/debug-db', async (req, res) => {
+    try {
+        const stats = await db.all("SELECT status, count(*) as total FROM leads GROUP BY status");
+        const latest = await db.all("SELECT * FROM leads ORDER BY created_at DESC LIMIT 5");
+        res.json({ 
+            database_path: '/var/www/macos/db/database.sqlite',
+            stats: stats,
+            latest_leads: latest,
+            message: "Se stats estiver vazio, o banco está sendo lido de outro lugar ou está vazio."
+        });
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
+});
+})();

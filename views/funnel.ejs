@@ -1,518 +1,850 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análise de Perfil</title>
+    <title>Paulinho dos Leilões — Como posso te ajudar?</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
-
-    <!-- Intl Tel Input -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css">
-    <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
-    <style>
-        .iti {
-            width: 100%;
-        }
-
-        .iti__flag {
-            background-image: url("https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/img/flags.png");
-        }
-
-        @media (-webkit-min-device-pixel-ratio: 2),
-        (min-resolution: 192dpi) {
-            .iti__flag {
-                background-image: url("https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/img/flags@2x.png");
-            }
-        }
-    </style>
-
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --gold-primary: #D4AF37;
+            --gold: #D4AF37;
             --gold-hover: #B5952F;
-            --dark-bg: #0f172a;
-            --card-bg: #1e293b;
+            --dark: #0a0f1e;
+            --card: #141c2e;
+            --card-border: rgba(212,175,55,0.15);
         }
-
+        * { box-sizing: border-box; }
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: var(--dark-bg);
+            background: var(--dark);
             color: white;
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow-x: hidden;
+        }
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 20% 50%, rgba(212,175,55,0.04) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.04) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .container { position: relative; z-index: 1; }
+
+        /* Steps */
+        .step { display: none; animation: fadeUp 0.35s ease; }
+        .step.active { display: block; }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
-        .step-content {
-            display: none;
-            animation: fadeIn 0.4s ease-in-out;
+        /* Progress */
+        .progress-bar { transition: width 0.4s ease; }
+
+        /* Pulse glow for CTA */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0.4); }
+            50%       { box-shadow: 0 0 0 12px rgba(212,175,55,0); }
+        }
+        .btn-gold-pulse { animation: pulseGlow 2s infinite; }
+
+        /* Stat counter cards */
+        .stat-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 14px;
+            padding: 10px 8px;
+            text-align: center;
+            flex: 1;
+        }
+        @media (min-width: 640px) {
+            .stat-card { padding: 14px 10px; }
+        }
+        .stat-number {
+            font-size: 26px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #D4AF37, #f5d87a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            letter-spacing: -1px;
         }
 
-        .step-content.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .option-card {
-            transition: all 0.2s ease;
-            border: 2px solid transparent;
-        }
-
-        .option-card:hover {
-            border-color: rgba(212, 175, 55, 0.3);
-            background-color: rgba(255, 255, 255, 0.05);
-        }
-
-        .option-card.selected {
-            border-color: var(--gold-primary);
-            background-color: rgba(212, 175, 55, 0.1);
-        }
-
-        .progress-bar-fill {
-            transition: width 0.4s ease;
-        }
-
-        /* Custom Range Slider */
-        input[type=range] {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            background: transparent;
-        }
-
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 24px;
-            width: 24px;
+        /* Avatar stack */
+        .avatar-stack { display: flex; }
+        .avatar-stack img, .avatar-stack div {
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            background: var(--gold-primary);
-            cursor: pointer;
-            margin-top: -10px;
-            box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+            border: 2px solid var(--dark);
+            margin-left: -8px;
+            flex-shrink: 0;
+        }
+        .avatar-stack div {
+            background: linear-gradient(135deg, #D4AF37, #B5952F);
+            color: black;
+            font-size: 9px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
+        /* Product Cards */
+        .product-card {
+            background: var(--card);
+            border: 1.5px solid rgba(255,255,255,0.07);
+            border-radius: 16px;
+            padding: 20px;
             cursor: pointer;
-            background: #334155;
-            border-radius: 2px;
+            transition: all 0.22s ease;
+            position: relative;
+            overflow: hidden;
         }
+        .product-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 0.22s ease;
+        }
+        .product-card:hover { border-color: rgba(212,175,55,0.4); transform: translateY(-2px); }
+        .product-card.selected { border-color: var(--gold); background: rgba(212,175,55,0.08); }
+        .product-card.selected::after {
+            content: '\f00c';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 22px;
+            height: 22px;
+            background: var(--gold);
+            color: black;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            line-height: 22px;
+            text-align: center;
+        }
+
+        /* Option pill (morar/investir) */
+        .option-pill {
+            background: var(--card);
+            border: 1.5px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            padding: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .option-pill:hover { border-color: rgba(212,175,55,0.4); }
+        .option-pill.selected { border-color: var(--gold); background: rgba(212,175,55,0.1); }
+
+        /* Gold button */
+        .btn-gold {
+            background: linear-gradient(135deg, #D4AF37, #B5952F);
+            color: black;
+            font-weight: 700;
+            border-radius: 12px;
+            padding: 16px 24px;
+            width: 100%;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        .btn-gold:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(212,175,55,0.3); }
+        .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Input */
+        .field-input {
+            width: 100%;
+            background: var(--card);
+            border: 1.5px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: white;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .field-input:focus { border-color: var(--gold); }
+        .field-input::placeholder { color: rgba(255,255,255,0.3); }
+
+        /* Back link */
+        .btn-back {
+            color: rgba(255,255,255,0.4);
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s;
+            background: none;
+            border: none;
+            font-family: inherit;
+        }
+        .btn-back:hover { color: white; }
+
+        /* Badge tag */
+        .badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Featured cards (Licenciado + Promotor) */
+        .featured-card {
+            border-color: rgba(251, 191, 36, 0.25) !important;
+            background: rgba(251, 191, 36, 0.04);
+        }
+        .featured-card:hover {
+            border-color: rgba(251, 191, 36, 0.6) !important;
+            background: rgba(251, 191, 36, 0.08);
+            transform: translateY(-2px);
+        }
+        .promotor-card {
+            border-color: rgba(212, 175, 55, 0.35) !important;
+            background: linear-gradient(135deg, rgba(212,175,55,0.06), rgba(212,175,55,0.02));
+            box-shadow: 0 0 20px rgba(212,175,55,0.06);
+        }
+        .promotor-card:hover {
+            box-shadow: 0 4px 24px rgba(212,175,55,0.15);
+        }
+
+        /* Compact grid cards (2x2) */
+        .compact-card {
+            padding: 16px 12px !important;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .compact-card:hover { border-color: rgba(255,255,255,0.2); }
+
+        /* Range cards (capital investidor) */
+        .compact-range { padding: 14px 16px !important; }
+        .compact-range:hover { border-color: rgba(255,255,255,0.18); }
     </style>
 </head>
+<body>
 
-<body class="min-h-screen flex flex-col items-center justify-center p-4">
+<!-- Progress Bar -->
+<div class="fixed top-0 left-0 w-full h-1 bg-slate-800 z-50">
+    <div id="progressBar" class="progress-bar h-full bg-gradient-to-r from-yellow-500 to-yellow-300 w-0"></div>
+</div>
 
-    <!-- Progress Bar -->
-    <div class="fixed top-0 left-0 w-full h-1 bg-slate-800 z-50">
-        <div class="progress-bar-fill h-full bg-yellow-500 w-[0%]"></div>
-    </div>
+<div class="container min-h-screen flex items-center justify-center px-4 py-2 sm:py-12 mx-auto">
+    <div class="w-full max-w-lg">
 
-    <main class="w-full max-w-lg">
+        <!-- Logo Removida -->
 
-        <!-- Header / Logo -->
-        <!-- Header / Logo -->
-        <div class="text-center mb-8">
-            <img src="/images/logo-fortal.png" alt="Logo" class="h-24 mx-auto mb-2 object-contain drop-shadow-2xl">
-            <p class="text-slate-400 text-sm font-medium uppercase tracking-widest">Leilões</p>
-        </div>
 
-        <form id="funnelForm" class="relative min-h-[400px]">
+        <form id="funnelForm">
 
-            <!-- STEP 1: INTRO -->
-            <div class="step-content active" data-step="1">
-                <div class="text-center mb-8">
-                    <h1 class="text-3xl font-bold mb-4 text-white">Descubra se leilão é para você</h1>
-                    <p class="text-slate-400 text-lg">Responda algumas perguntas rápidas e receba uma análise do seu
-                        perfil de arrematante.</p>
+            <!-- ===== STEP 1: INTRO ===== -->
+            <div class="step active" data-step="1">
+
+                <!-- Headline principal -->
+                <div class="text-center mb-2 sm:mb-6">
+                    <h1 class="text-2xl sm:text-4xl font-black text-white leading-[1.1] mb-2 sm:mb-3 tracking-tight">
+                        Imóvel de leilão<br>
+                        <span style="background: linear-gradient(135deg, #D4AF37, #f5d87a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">com quem mais arrematou</span><br>
+                        no Brasil.
+                    </h1>
+                    <p class="text-slate-400 text-[13px] sm:text-base leading-relaxed max-w-sm mx-auto">
+                        Mais de <strong class="text-white">1.000 alunos formados</strong> e <strong class="text-white">1.000 arrematações</strong> realizadas com a nossa metodologia.
+                    </p>
                 </div>
 
-                <div class="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 mb-8">
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center flex-shrink-0 mt-1">
-                            <i class="fa-solid fa-lightbulb text-yellow-500 text-sm"></i>
+                <!-- Stats em linha -->
+                <div class="flex gap-2 sm:gap-3 mb-3 sm:mb-5">
+                    <div class="stat-card flex-1">
+                        <p class="stat-number" id="countAlunos">0</p>
+                        <p class="text-[11px] text-slate-500 mt-1 font-medium">Alunos</p>
+                    </div>
+                    <div class="stat-card">
+                        <p class="stat-number" id="countArremates">0</p>
+                        <p class="text-[11px] text-slate-500 mt-1 font-medium">Arrematações</p>
+                    </div>
+                    <div class="stat-card">
+                        <p class="stat-number">Suporte</p>
+                        <p class="text-[11px] text-slate-500 mt-1 font-medium">Individual e Dedicado</p>
+                    </div>
+                </div>
+
+                <!-- Prova social: avatares -->
+                <div class="flex items-center gap-3 mb-3 sm:mb-6 bg-white/3 border border-white/6 rounded-xl px-4 py-2 sm:py-3">
+                    <div class="avatar-stack ml-2">
+                        <div>AG</div>
+                        <div>MR</div>
+                        <div>FS</div>
+                        <div>LT</div>
+                        <div>+</div>
+                    </div>
+                    <p class="text-[10px] sm:text-xs text-slate-400 leading-tight">
+                        <span class="text-white font-semibold">Mais de 1.000 pessoas</span> já transformaram
+                        seu patrimônio com o Paulinho.
+                    </p>
+                </div>
+
+                <button type="button" onclick="nextStep(2)" class="btn-gold btn-gold-pulse">
+                    Quero saber como <i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+
+                <p class="text-center text-[11px] text-slate-600 mt-2">
+                    <i class="fa-solid fa-lock mr-1"></i> Seus dados são 100% seguros e confidenciais
+                </p>
+            </div>
+
+            <!-- ===== STEP 2: INTERESSE (produto) ===== -->
+            <div class="step" data-step="2">
+                <h2 class="text-2xl font-bold mb-1 text-white">Como posso te ajudar?</h2>
+                <p class="text-slate-400 mb-5 text-sm">Escolha uma opção abaixo.</p>
+
+                <input type="hidden" name="interesse" id="interesseInput">
+                <input type="hidden" name="objetivo" id="objetivoInput">
+
+                <!-- ⭐ DESTAQUE: Licenciado + Promotor -->
+                <p class="text-[10px] font-bold uppercase tracking-widest text-yellow-500/80 mb-3">
+                    <i class="fa-solid fa-fire mr-1"></i> Mais procurado
+                </p>
+                <div class="space-y-2 mb-4">
+
+                    <!-- Licenciado FEATURED -->
+                    <div class="product-card featured-card" onclick="selectInteresse(this, 'licenciado')">
+                        <div class="flex items-center gap-4">
+                            <div class="w-11 h-11 rounded-xl bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-id-badge text-amber-400 text-lg"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-white">Licenciado</span>
+                                    <span class="badge bg-amber-500/15 text-amber-400 border border-amber-500/30">Parceiro</span>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-0.5 leading-relaxed">Acompanha clientes do 1º contato ao arremate — captação, lance e pós-arremate.</p>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-amber-400/50 text-xs flex-shrink-0"></i>
                         </div>
-                        <div>
-                            <h3 class="font-semibold text-white mb-1">Por que participar?</h3>
-                            <p class="text-sm text-slate-400">Imóveis de leilão podem custar até 60% menos que o valor
-                                de mercado. É a forma mais inteligente de construir patrimônio.</p>
+                    </div>
+
+                    <!-- Promotor FEATURED -->
+                    <div class="product-card featured-card promotor-card" onclick="selectInteresse(this, 'promotor')">
+                        <div class="flex items-center gap-4">
+                            <div class="w-11 h-11 rounded-xl bg-yellow-500/15 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-crown text-yellow-400 text-lg"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-white">Promotor Oficial</span>
+                                    <span class="badge bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">Exclusivo</span>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-0.5 leading-relaxed">Representante oficial na sua região — máxima autoridade da marca.</p>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-yellow-400/50 text-xs flex-shrink-0"></i>
                         </div>
                     </div>
                 </div>
 
-                <button type="button" onclick="nextStep(2)"
-                    class="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold py-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-yellow-500/20">
-                    Começar Análise <i class="fa-solid fa-arrow-right ml-2"></i>
-                </button>
-            </div>
+                <!-- Outras opções em grid compacto -->
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Outras opções</p>
+                <div class="grid grid-cols-2 gap-2 mb-4">
 
-            <!-- STEP 2: OBJETIVO -->
-            <div class="step-content" data-step="2">
-                <h2 class="text-2xl font-bold mb-2 text-white">Qual seu objetivo principal?</h2>
-                <p class="text-slate-400 mb-8">Isso ajuda a definir o tipo de oportunidade ideal.</p>
+                    <div class="product-card compact-card" onclick="selectInteresse(this, 'assessoria')">
+                        <i class="fa-solid fa-handshake text-blue-400 mb-2 text-lg"></i>
+                        <p class="font-semibold text-white text-sm">Assessoria</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Comprar imóvel em leilão</p>
+                    </div>
 
-                <div class="grid grid-cols-1 gap-4">
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="objetivo" value="morar" class="hidden" onchange="autoNext(3)">
-                        <div
-                            class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                            <i class="fa-solid fa-house-user text-blue-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Morar</span>
-                            <span class="text-sm text-slate-400">Busco minha casa própria</span>
-                        </div>
-                    </label>
+                    <div class="product-card compact-card" onclick="selectInteresse(this, 'mentoria_individual')">
+                        <i class="fa-solid fa-user-tie text-emerald-400 mb-2 text-lg"></i>
+                        <p class="font-semibold text-white text-sm">Mentoria Individual</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Atendimento exclusivo</p>
+                    </div>
 
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="objetivo" value="investir" class="hidden" onchange="autoNext(3)">
-                        <div
-                            class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-                            <i class="fa-solid fa-chart-line text-green-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Investir</span>
-                            <span class="text-sm text-slate-400">Quero revender ou alugar</span>
-                        </div>
-                    </label>
-                </div>
+                    <div class="product-card compact-card" onclick="selectInteresse(this, 'mentoria_online')">
+                        <i class="fa-solid fa-laptop text-purple-400 mb-2 text-lg"></i>
+                        <p class="font-semibold text-white text-sm">Mentoria Online</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Aprender no meu ritmo</p>
+                    </div>
 
-                <button type="button" onclick="prevStep(1)"
-                    class="mt-8 text-slate-500 hover:text-white text-sm font-medium flex items-center gap-2">
-                    <i class="fa-solid fa-arrow-left"></i> Voltar
-                </button>
-            </div>
-
-            <!-- STEP 3: EXPERIÊNCIA (NEW) -->
-            <div class="step-content" data-step="3">
-                <h2 class="text-2xl font-bold mb-2 text-white">Qual sua experiência?</h2>
-                <p class="text-slate-400 mb-8">Já participou de algum leilão antes?</p>
-
-                <div class="grid grid-cols-1 gap-4">
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="experiencia" value="primeira_vez" class="hidden"
-                            onchange="autoNext(4)">
-                        <div
-                            class="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                            <i class="fa-solid fa-graduation-cap text-purple-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">É minha primeira vez</span>
-                            <span class="text-sm text-slate-400">Quero aprender como funciona</span>
-                        </div>
-                    </label>
-
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="experiencia" value="ja_arrematei" class="hidden"
-                            onchange="autoNext(4)">
-                        <div
-                            class="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors">
-                            <i class="fa-solid fa-gavel text-yellow-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Já arrematei imóveis</span>
-                            <span class="text-sm text-slate-400">Busco novas oportunidades</span>
-                        </div>
-                    </label>
-                </div>
-
-                <button type="button" onclick="prevStep(2)"
-                    class="mt-8 text-slate-500 hover:text-white text-sm font-medium flex items-center gap-2">
-                    <i class="fa-solid fa-arrow-left"></i> Voltar
-                </button>
-            </div>
-
-            <!-- STEP 4: INTERESSE (NEW) -->
-            <div class="step-content" data-step="4">
-                <h2 class="text-2xl font-bold mb-2 text-white">Como podemos te ajudar?</h2>
-                <p class="text-slate-400 mb-8">Escolha a opção que melhor se adapta à sua necessidade.</p>
-
-                <div class="grid grid-cols-1 gap-4">
-                    <!-- Assessoria -->
-                    <label onclick="handleInterestClick(this, 'assessoria')"
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="interesse" value="assessoria" class="hidden">
-                        <div
-                            class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                            <i class="fa-solid fa-handshake text-blue-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Assessoria Singular</span>
-                            <span class="text-sm text-slate-400">Acompanhamento presencial da equipe (Fortaleza e
-                                região).</span>
-                        </div>
-                    </label>
-
-                    <!-- Consultoria -->
-                    <label onclick="handleInterestClick(this, 'consultoria')"
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="interesse" value="consultoria" class="hidden">
-                        <div
-                            class="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
-                            <i class="fa-solid fa-headset text-indigo-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Consultoria Online</span>
-                            <span class="text-sm text-slate-400">Acompanhamento realizado online pela nossa
-                                equipe.</span>
-                        </div>
-                    </label>
-
-                    <!-- Mentoria -->
-                    <label onclick="handleInterestClick(this, 'mentoria')"
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="interesse" value="mentoria" class="hidden">
-                        <div
-                            class="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                            <i class="fa-solid fa-graduation-cap text-purple-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Mentoria Online</span>
-                            <span class="text-sm text-slate-400">Vídeo aulas passo a passo para arrematar.</span>
-                            <!-- Removed manual link, now handled by card click -->
-                            <span class="text-xs text-yellow-500 mt-1 block">Clique para saber mais <i
-                                    class="fa-solid fa-external-link-alt ml-1"></i></span>
-                        </div>
-                    </label>
-
-                    <!-- Parcerias/Eventos -->
-                    <label onclick="handleInterestClick(this, 'parcerias')"
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 flex items-center gap-4 group">
-                        <input type="radio" name="interesse" value="parcerias" class="hidden">
-                        <div
-                            class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-                            <i class="fa-solid fa-users text-green-400 text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="block font-bold text-lg text-white">Parcerias e Eventos</span>
-                            <span class="text-sm text-slate-400">Tenho interesse em parcerias ou eventos.</span>
-                        </div>
-                    </label>
-                </div>
-
-                <button type="button" onclick="prevStep(3)"
-                    class="mt-8 text-slate-500 hover:text-white text-sm font-medium flex items-center gap-2">
-                    <i class="fa-solid fa-arrow-left"></i> Voltar
-                </button>
-            </div>
-
-            <!-- STEP 5: FINANCIALS (Was Step 4) -->
-            <div class="step-content" data-step="5">
-                <h2 class="text-2xl font-bold mb-2 text-white">Capacidade Financeira</h2>
-                <p class="text-slate-400 mb-8">Quanto você tem disponível para investir ou dar de entrada?</p>
-
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 mb-6">
-                    <label class="block text-sm font-medium text-slate-400 mb-2">Valor Disponível (R$)</label>
-                    <input type="tel" name="capital_disponivel" id="capital_input"
-                        class="w-full bg-transparent text-3xl font-bold text-white focus:outline-none border-b border-slate-600 pb-2 focus:border-yellow-500 transition-colors"
-                        placeholder="0,00">
-                </div>
-
-                <div class="mb-8">
-                    <p class="text-sm font-medium text-slate-300 mb-4">Como prefere pagar?</p>
-                    <div class="flex gap-4">
-                        <label
-                            class="flex-1 option-card cursor-pointer p-4 rounded-xl bg-slate-800 border border-slate-700 text-center flex flex-col items-center justify-center h-40 group hover:bg-slate-700 transition-all relative overflow-hidden"
-                            onclick="selectPayment(this)">
-                            <input type="radio" name="preferencia_pgto" value="vista" class="hidden">
-                            <div
-                                class="absolute top-0 right-0 bg-yellow-500 text-black text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                                RECOMENDADO
-                            </div>
-                            <div
-                                class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-2 group-hover:bg-green-500/20 transition-colors icon-container">
-                                <i class="fa-solid fa-money-bill-wave text-green-500 text-xl"></i>
-                            </div>
-                            <span class="block font-bold text-white text-lg">À Vista</span>
-                            <span class="text-[10px] text-green-400 font-medium mt-1">+ Descontos</span>
-                            <div
-                                class="absolute inset-0 bg-green-500/10 opacity-0 transition-opacity selection-overlay">
-                            </div>
-                        </label>
-                        <label
-                            class="flex-1 option-card cursor-pointer p-4 rounded-xl bg-slate-800 border border-slate-700 text-center flex flex-col items-center justify-center h-40 group hover:bg-slate-700 transition-all relative overflow-hidden"
-                            onclick="selectPayment(this)">
-                            <input type="radio" name="preferencia_pgto" value="financiado" class="hidden">
-                            <div
-                                class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-2 group-hover:bg-blue-500/20 transition-colors icon-container">
-                                <i class="fa-solid fa-building-columns text-blue-500 text-xl"></i>
-                            </div>
-                            <span class="block font-bold text-white text-lg">Financiado</span>
-                            <span class="text-[10px] text-slate-500 font-medium mt-1">Via Banco</span>
-                            <div class="absolute inset-0 bg-blue-500/10 opacity-0 transition-opacity selection-overlay">
-                            </div>
-                        </label>
+                    <div class="product-card compact-card" onclick="selectInteresse(this, 'eventos')">
+                        <i class="fa-solid fa-microphone text-rose-400 mb-2 text-lg"></i>
+                        <p class="font-semibold text-white text-sm">Eventos</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Palestras e workshops</p>
                     </div>
                 </div>
 
-                <div class="bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20 flex gap-3 items-start">
-                    <i class="fa-solid fa-circle-info text-yellow-500 mt-1"></i>
-                    <p class="text-xs text-yellow-200">Em leilões da Caixa, é possível financiar até 95% do imóvel.</p>
-                </div>
-
-                <div class="flex justify-between items-center mt-8">
-                    <button type="button" onclick="prevStep(4)"
-                        class="text-slate-500 hover:text-white text-sm font-medium">Voltar</button>
-                    <button type="button" onclick="validateStepFinance()"
-                        class="bg-white text-black px-6 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors">
-                        Próximo <i class="fa-solid fa-arrow-right ml-2 text-xs"></i>
-                    </button>
-                </div>
+                <button type="button" onclick="prevStep(1)" class="btn-back">
+                    <i class="fa-solid fa-arrow-left"></i> Voltar
+                </button>
             </div>
 
-            <!-- STEP 6: QUALIFICATION (Was Step 5) -->
-            <div class="step-content" data-step="6">
-                <h2 class="text-2xl font-bold mb-2 text-white">Análise de Crédito</h2>
-                <p class="text-slate-400 mb-8">Essa informação é sigilosa e usada apenas para filtrar oportunidades de
-                    financiamento.</p>
-
-                <h3 class="text-lg font-medium text-white mb-4">Seu nome possui restrições (negativado)?</h3>
+            <!-- ===== STEP 3: ASSESSORIA — morar ou investir ===== -->
+            <div class="step" data-step="3">
+                <h2 class="text-2xl font-bold mb-2 text-white">Qual o seu objetivo?</h2>
+                <p class="text-slate-400 mb-6 text-sm">Isso ajuda a filtrar as melhores oportunidades para você.</p>
 
                 <div class="grid grid-cols-2 gap-4 mb-8">
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 text-center">
-                        <input type="radio" name="restricao_nome" value="true" class="hidden" onchange="autoNext(7)">
-                        <span class="block text-2xl mb-2">🚫</span>
-                        <span class="font-bold text-white">Sim, possuo</span>
+                    <label class="option-pill" onclick="selectObjetivo(this, 'morar')">
+                        <input type="radio" name="_objetivo_ui" class="hidden">
+                        <div class="text-3xl mb-3">🏠</div>
+                        <p class="font-bold text-white">Morar</p>
+                        <p class="text-xs text-slate-400 mt-1">Busco minha casa própria com desconto</p>
                     </label>
-
-                    <label
-                        class="option-card cursor-pointer p-6 rounded-2xl bg-slate-800 border border-slate-700 text-center">
-                        <input type="radio" name="restricao_nome" value="false" class="hidden" onchange="autoNext(7)">
-                        <span class="block text-2xl mb-2">✅</span>
-                        <span class="font-bold text-white">Não, nome limpo</span>
+                    <label class="option-pill" onclick="selectObjetivo(this, 'investir')">
+                        <input type="radio" name="_objetivo_ui" class="hidden">
+                        <div class="text-3xl mb-3">📈</div>
+                        <p class="font-bold text-white">Investir</p>
+                        <p class="text-xs text-slate-400 mt-1">Quero revender ou alugar para lucrar</p>
                     </label>
                 </div>
 
-                <div class="flex justify-between items-center mt-8">
-                    <button type="button" onclick="prevStep(5)"
-                        class="text-slate-500 hover:text-white text-sm font-medium">Voltar</button>
-                </div>
+                <button type="button" onclick="prevStep(2)" class="btn-back">
+                    <i class="fa-solid fa-arrow-left"></i> Voltar
+                </button>
             </div>
 
-            <!-- STEP 7: CONTACT (Was Step 6) -->
-            <div class="step-content" data-step="7">
-                <h2 class="text-2xl font-bold mb-2 text-white">Último passo!</h2>
-                <p class="text-slate-400 mb-8">Onde enviamos as oportunidades selecionadas para seu perfil?</p>
-
-                <div class="space-y-4 mb-8">
-                    <div class="grid grid-cols-3 gap-4">
-                        <div class="col-span-1">
-                            <label class="block text-sm font-medium text-slate-400 mb-2">Estado</label>
-                            <select name="estado"
-                                class="w-full bg-slate-800 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-yellow-500 focus:outline-none appearance-none">
-                                <option value="" disabled selected>UF</option>
-                                <option value="AC">AC</option>
-                                <option value="AL">AL</option>
-                                <option value="AP">AP</option>
-                                <option value="AM">AM</option>
-                                <option value="BA">BA</option>
-                                <option value="CE">CE</option>
-                                <option value="DF">DF</option>
-                                <option value="ES">ES</option>
-                                <option value="GO">GO</option>
-                                <option value="MA">MA</option>
-                                <option value="MT">MT</option>
-                                <option value="MS">MS</option>
-                                <option value="MG">MG</option>
-                                <option value="PA">PA</option>
-                                <option value="PB">PB</option>
-                                <option value="PR">PR</option>
-                                <option value="PE">PE</option>
-                                <option value="PI">PI</option>
-                                <option value="RJ">RJ</option>
-                                <option value="RN">RN</option>
-                                <option value="RS">RS</option>
-                                <option value="RO">RO</option>
-                                <option value="RR">RR</option>
-                                <option value="SC">SC</option>
-                                <option value="SP">SP</option>
-                                <option value="SE">SE</option>
-                                <option value="TO">TO</option>
-                            </select>
+            <!-- ===== STEP 4: CAPITAL (só Assessoria) ===== -->
+            <div class="step" data-step="4">
+                <div id="capitalInvestirBlock">
+                    <h2 class="text-2xl font-bold mb-1 text-white">Qual sua faixa de capital?</h2>
+                    <p class="text-slate-400 mb-5 text-sm">Selecione o valor aproximado disponível para investir.</p>
+                    <div class="space-y-3 mb-6">
+                        <div class="product-card compact-range" onclick="selectCapital(this, '0-50000', '0 a 50 mil')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-seedling text-green-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-white text-sm">Até R$ 50.000</p>
+                                    <p class="text-[11px] text-slate-500">Entrada inicial</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-span-2">
-                            <label class="block text-sm font-medium text-slate-400 mb-2">Cidade</label>
-                            <input type="text" name="cidade"
-                                class="w-full bg-slate-800 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-yellow-500 focus:outline-none"
-                                placeholder="Ex: Fortaleza">
+                        <div class="product-card compact-range" onclick="selectCapital(this, '50000-100000', '50 mil a 100 mil')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-chart-line text-blue-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-white text-sm">R$ 50.000 a R$ 100.000</p>
+                                    <p class="text-[11px] text-slate-500">Perfil intermediário</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="product-card compact-range" onclick="selectCapital(this, '100000-1000000', '100 mil a 1 milhão')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-white text-sm">R$ 100.000 a R$ 1.000.000</p>
+                                    <p class="text-[11px] text-slate-500">Investidor ativo</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="product-card compact-range" onclick="selectCapital(this, '1000000+', 'Acima de 1 milhão')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-crown text-yellow-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-white text-sm">Acima de R$ 1.000.000</p>
+                                    <p class="text-[11px] text-slate-500">Investidor de alto volume</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                </div>
 
+                <div id="capitalMorarBlock" class="hidden">
+                    <h2 class="text-2xl font-bold mb-1 text-white">Quanto você tem disponível?</h2>
+                    <p class="text-slate-400 mb-5 text-sm">Informe o valor total para compra ou entrada.</p>
+                    <div class="relative mb-6">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
+                        <input type="text" id="capitalMorarInput" 
+                            class="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-white font-bold text-xl focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all placeholder:text-slate-700"
+                            placeholder="0,00"
+                            oninput="formatCurrency(this)">
+                    </div>
+                    <button type="button" onclick="confirmCapitalMorar()" class="btn-gold">
+                        Continuar <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+
+                <button type="button" onclick="prevStep(3)" class="btn-back mt-4">
+                    <i class="fa-solid fa-arrow-left"></i> Voltar
+                </button>
+            </div>
+
+            <!-- ===== STEP 5: CONTATO ===== -->
+            <div class="step" data-step="5">
+                <h2 class="text-2xl font-bold mb-2 text-white">Quase lá!</h2>
+                <p class="text-slate-400 mb-6 text-sm">Preencha seus dados para entrarmos em contato.</p>
+
+                <div class="space-y-4 mb-6">
                     <div>
                         <label class="block text-sm font-medium text-slate-400 mb-2">Seu Nome</label>
-                        <input type="text" name="nome"
-                            class="w-full bg-slate-800 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-yellow-500 focus:outline-none"
-                            placeholder="Ex: João da Silva">
+                        <input type="text" name="nome" class="field-input" placeholder="Ex: João da Silva" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-2">Estado</label>
+                        <select name="estado" class="field-input" required style="appearance: none; cursor: pointer;">
+                            <option value="" disabled selected>Selecione seu estado...</option>
+                            <option value="AC">Acre (AC)</option>
+                            <option value="AL">Alagoas (AL)</option>
+                            <option value="AP">Amapá (AP)</option>
+                            <option value="AM">Amazonas (AM)</option>
+                            <option value="BA">Bahia (BA)</option>
+                            <option value="CE">Ceará (CE)</option>
+                            <option value="DF">Distrito Federal (DF)</option>
+                            <option value="ES">Espírito Santo (ES)</option>
+                            <option value="GO">Goiás (GO)</option>
+                            <option value="MA">Maranhão (MA)</option>
+                            <option value="MT">Mato Grosso (MT)</option>
+                            <option value="MS">Mato Grosso do Sul (MS)</option>
+                            <option value="MG">Minas Gerais (MG)</option>
+                            <option value="PA">Pará (PA)</option>
+                            <option value="PB">Paraíba (PB)</option>
+                            <option value="PR">Paraná (PR)</option>
+                            <option value="PE">Pernambuco (PE)</option>
+                            <option value="PI">Piauí (PI)</option>
+                            <option value="RJ">Rio de Janeiro (RJ)</option>
+                            <option value="RN">Rio Grande do Norte (RN)</option>
+                            <option value="RS">Rio Grande do Sul (RS)</option>
+                            <option value="RO">Rondônia (RO)</option>
+                            <option value="RR">Roraima (RR)</option>
+                            <option value="SC">Santa Catarina (SC)</option>
+                            <option value="SP">São Paulo (SP)</option>
+                            <option value="SE">Sergipe (SE)</option>
+                            <option value="TO">Tocantins (TO)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-2">Cidade</label>
+                        <input type="text" name="cidade" class="field-input" placeholder="Ex: Fortaleza" required>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-400 mb-2">WhatsApp</label>
-                        <input type="tel" name="whatsapp" id="whatsapp_input"
-                            class="w-full bg-slate-800 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-yellow-500 focus:outline-none"
-                            placeholder="(00) 00000-0000">
+                        <input type="tel" name="whatsapp" id="whatsappInput" class="field-input" placeholder="(00) 00000-0000" required>
                     </div>
                 </div>
 
-                <button type="submit"
-                    class="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold py-4 rounded-xl transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2">
-                    <span id="btnText">Ver meu Resultado</span>
-                    <i id="btnIcon" class="fa-solid fa-check"></i>
-                    <i id="btnSpinner" class="fa-solid fa-circle-notch fa-spin hidden"></i>
+                <!-- Resumo do que selecionou -->
+                <div id="summaryBox" class="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 mb-6">
+                    <p class="text-xs font-semibold text-yellow-500/80 uppercase tracking-wider mb-2">Seu interesse</p>
+                    <p id="summaryText" class="text-white font-medium text-sm"></p>
+                </div>
+
+                <button type="submit" id="btnSubmit" class="btn-gold">
+                    <span id="btnText">Enviar meu cadastro <i class="fa-solid fa-paper-plane ml-2"></i></span>
+                    <span id="btnSpinner" class="hidden"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Enviando...</span>
                 </button>
 
-                <button type="button" id="btnBackContact" onclick="handleBackContact()"
-                    class="w-full mt-4 text-slate-500 hover:text-white text-sm font-medium">Voltar</button>
+                <button type="button" onclick="prevStep(getContactPrevStep())" class="btn-back mt-4 w-full justify-center">
+                    <i class="fa-solid fa-arrow-left"></i> Voltar
+                </button>
             </div>
 
-            <!-- STEP 6: SUCCESS -->
-            <div class="step-content text-center" data-step="success">
-                <div
-                    class="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-                    <i class="fa-solid fa-check text-4xl text-green-500"></i>
-                </div>
-                <h2 class="text-3xl font-bold mb-4 text-white">Perfil Recebido!</h2>
-                <p class="text-slate-400 mb-8 max-w-xs mx-auto">Nossa inteligência artificial já classificou seu perfil.
-                    Um de nossos assessores entrará em contato para tirar mais dúvidas.</p>
-
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 mb-8 max-w-sm mx-auto">
-                    <p class="text-sm font-medium text-slate-300 mb-2">Seu Score de Arrematante</p>
-                    <div class="w-full h-4 bg-slate-700 rounded-full overflow-hidden mb-2">
-                        <div id="scoreBar"
-                            class="h-full bg-gradient-to-r from-yellow-400 to-green-500 w-[0%] transition-all duration-1000">
-                        </div>
+            <!-- ===== STEP SUCCESS ===== -->
+            <div class="step" data-step="success">
+                <div class="text-center">
+                    <div class="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fa-solid fa-check text-4xl text-green-400"></i>
                     </div>
-                    <p class="text-right text-xs text-yellow-500 font-bold" id="scoreText">Calculando...</p>
-                </div>
+                    <h2 class="text-3xl font-extrabold mb-3 text-white">Cadastro Recebido!</h2>
+                    <p class="text-slate-400 mb-8 max-w-xs mx-auto">Nossa equipe vai analisar seu perfil e entrar em contato em breve pelo WhatsApp.</p>
 
-                <a href="https://instagram.com/fortalleiloes"
-                    class="inline-flex items-center text-slate-400 hover:text-white transition-colors">
-                    <i class="fa-brands fa-instagram mr-2"></i> Voltar para o Instagram
-                </a>
+                    <div class="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-8 max-w-sm mx-auto text-left">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Seu Score de Qualificação</p>
+                        <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden mb-2">
+                            <div id="scoreBar" class="h-full bg-gradient-to-r from-yellow-400 to-green-400 w-0 transition-all duration-1000"></div>
+                        </div>
+                        <p id="scoreText" class="text-right text-xs text-yellow-500 font-bold">Calculando...</p>
+                    </div>
+
+                    <a href="https://instagram.com/paulinhodosleiloes" target="_blank"
+                        class="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm">
+                        <i class="fa-brands fa-instagram text-rose-400"></i> Seguir no Instagram
+                    </a>
+                </div>
             </div>
 
         </form>
-    </main>
+    </div>
+</div>
 
-    <script src="/js/funnel.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+// =============================================
+// STATE
+// =============================================
+let currentStep = 1;
+let selectedInteresse = '';
+let selectedObjetivo = '';
+let selectedCapital = '';
+const TOTAL_STEPS = 5;
+
+// =============================================
+// NAVIGATION
+// =============================================
+function showStep(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    const el = document.querySelector(`[data-step="${n}"]`);
+    if (el) el.classList.add('active');
+    currentStep = typeof n === 'number' ? n : 0;
+    updateProgress();
+}
+
+function nextStep(n) { showStep(n); }
+function prevStep(n) { showStep(n); }
+
+// Volta do step de contato (5)
+function getContactPrevStep() {
+    if (selectedInteresse === 'assessoria') return 4; // volta para capital
+    return 2; // licenciado/promotor/outros voltam para seleção de interesse
+}
+
+function updateProgress() {
+    const stepNum = currentStep === 'success' ? TOTAL_STEPS : (typeof currentStep === 'number' ? currentStep : TOTAL_STEPS);
+    const pct = Math.round((stepNum / TOTAL_STEPS) * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+}
+
+// =============================================
+// INTEREST SELECTION
+// =============================================
+function selectInteresse(card, value) {
+    document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedInteresse = value;
+    document.getElementById('interesseInput').value = value;
+
+    setTimeout(() => {
+        if (value === 'assessoria') {
+            nextStep(3); // Assessoria → morar/investir
+        } else {
+            // Licenciado, Promotor, Mentoria, Eventos → direto para contato
+            selectedObjetivo = '';
+            selectedCapital = '';
+            document.getElementById('objetivoInput').value = '';
+            updateSummary();
+            nextStep(5);
+        }
+    }, 250);
+}
+
+// =============================================
+// OBJETIVO (morar/investir) — só Assessoria
+// =============================================
+function selectObjetivo(pill, value) {
+    document.querySelectorAll('.option-pill').forEach(p => p.classList.remove('selected'));
+    pill.classList.add('selected');
+    selectedObjetivo = value;
+    document.getElementById('objetivoInput').value = value;
+
+    setTimeout(() => {
+        // Mostra bloco correto no step 4
+        document.getElementById('capitalInvestirBlock').classList.toggle('hidden', value !== 'investir');
+        document.getElementById('capitalMorarBlock').classList.toggle('hidden', value !== 'morar');
+        // Reseta seleções de faixas
+        document.querySelectorAll('.compact-range').forEach(c => c.classList.remove('selected'));
+        document.getElementById('capitalMorarInput').value = '';
+        selectedCapital = '';
+        nextStep(4);
+    }, 250);
+}
+
+// =============================================
+// CAPITAL — Investidor (faixas)
+// =============================================
+function selectCapital(card, value, label) {
+    document.querySelectorAll('.compact-range').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedCapital = value;
+    setTimeout(() => {
+        updateSummary();
+        nextStep(5);
+    }, 250);
+}
+
+// =============================================
+// CAPITAL — Morar (campo livre)
+// =============================================
+function confirmCapitalMorar() {
+    const val = document.getElementById('capitalMorarInput').value.trim();
+    if (!val) { alert('Informe o valor disponível.'); return; }
+    selectedCapital = val;
+    updateSummary();
+    nextStep(5);
+}
+
+// =============================================
+// SUMMARY BOX
+// =============================================
+const LABELS = {
+    assessoria: 'Assessoria Imobiliária',
+    mentoria_online: 'Mentoria Online',
+    mentoria_individual: 'Mentoria Individual',
+    licenciado: 'Licenciado',
+    promotor: 'Promotor Oficial',
+    eventos: 'Eventos e Palestras'
+};
+const OBJ_LABELS = { morar: 'para Morar', investir: 'para Investir' };
+
+function updateSummary() {
+    let text = LABELS[selectedInteresse] || selectedInteresse;
+    if (selectedInteresse === 'assessoria' && selectedObjetivo) {
+        text += ' — ' + OBJ_LABELS[selectedObjetivo];
+        if (selectedCapital) text += ' · R$ ' + selectedCapital.replace('0-50000','Até 50k').replace('50000-100000','50k–100k').replace('100000-1000000','100k–1M').replace('1000000+','1M+');
+    }
+    document.getElementById('summaryText').textContent = text;
+}
+
+// =============================================
+// FORM SUBMIT
+// =============================================
+document.getElementById('funnelForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Validation
+    const nome = document.querySelector('[name="nome"]').value.trim();
+    const cidade = document.querySelector('[name="cidade"]').value.trim();
+    const whatsapp = document.querySelector('[name="whatsapp"]').value.trim();
+
+    if (!nome || !cidade || !whatsapp) {
+        alert('Por favor, preencha todos os campos.');
+        return;
+    }
+    if (!selectedInteresse) {
+        alert('Por favor, selecione um interesse.');
+        return;
+    }
+
+    // UI loading
+    document.getElementById('btnText').classList.add('hidden');
+    document.getElementById('btnSpinner').classList.remove('hidden');
+    document.getElementById('btnSubmit').disabled = true;
+
+    // Resolve capital numérico para o backend
+    let capitalNum = 0;
+    if (selectedCapital === '0-50000')          capitalNum = 25000;
+    else if (selectedCapital === '50000-100000') capitalNum = 75000;
+    else if (selectedCapital === '100000-1000000') capitalNum = 550000;
+    else if (selectedCapital === '1000000+')    capitalNum = 1500000;
+    else if (selectedCapital) capitalNum = parseFloat(selectedCapital.replace(/[^0-9]/g, '')) || 0;
+
+    const formData = {
+        nome,
+        cidade,
+        whatsapp,
+        interesse: selectedInteresse,
+        objetivo: selectedObjetivo || 'nao_informado',
+        capital_disponivel: capitalNum,
+        // legacy fields
+        experiencia: 'primeira_vez',
+        restricao_nome: 'false',
+        preferencia_pgto: selectedObjetivo === 'investir' ? 'vista' : 'nao_informado',
+        estado: '',
+        fingerprint: window._fp || ''
+    };
+
+    try {
+        const res = await fetch('/api/leads/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showStep('success');
+            // Animate score bar
+            setTimeout(() => {
+                const score = data.score || 50;
+                document.getElementById('scoreBar').style.width = score + '%';
+                document.getElementById('scoreText').textContent = score + ' / 100';
+            }, 300);
+        } else {
+            throw new Error(data.error || 'Erro desconhecido');
+        }
+    } catch (err) {
+        console.error(err);
+        document.getElementById('btnText').classList.remove('hidden');
+        document.getElementById('btnSpinner').classList.add('hidden');
+        document.getElementById('btnSubmit').disabled = false;
+        alert('Ocorreu um erro. Tente novamente.');
+    }
+});
+
+// =============================================
+// MASKS
+// =============================================
+$(document).ready(function() {
+    $('#whatsappInput').mask('(00) 00000-0000');
+});
+
+// =============================================
+// FINGERPRINT (simple)
+// =============================================
+window._fp = btoa([navigator.userAgent, screen.width, screen.height, navigator.language].join('|')).substring(0, 32);
+// =============================================
+// ANIMATED COUNTERS (primeiros 3 segundos)
+// =============================================
+function animateCounter(el, target, duration, suffix) {
+    const start = performance.now();
+    const update = (time) => {
+        const elapsed = time - start;
+        const progress = Math.min(elapsed / duration, 1);
+        // easeOutExpo
+        const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+        const value = Math.round(ease * target);
+        el.textContent = value >= 1000 ? '1000+' : value + (value === target ? suffix : '');
+        if (progress < 1) requestAnimationFrame(update);
+        else el.textContent = '1000+';
+    };
+    requestAnimationFrame(update);
+}
+
+function formatCurrency(input) {
+    let value = input.value.replace(/\D/g, '');
+    value = (value / 100).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    input.value = value;
+    selectedCapital = value;
+}
+
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        const elAlunos   = document.getElementById('countAlunos');
+        const elArremates = document.getElementById('countArremates');
+        if (elAlunos)    animateCounter(elAlunos,    1000, 1800, '+');
+        if (elArremates) animateCounter(elArremates, 1000, 2000, '+');
+    }, 300);
+});
+</script>
 </body>
-
 </html>

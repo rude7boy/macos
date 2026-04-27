@@ -29,3 +29,11 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Agent Directories
+.agent/
+.gemini/
+.DS_Store
+*.txt
+*.pdf
+scratch/

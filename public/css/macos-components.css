@@ -7,7 +7,7 @@
    1. LAYOUT PRINCIPAL
    ============================================ */
 .macos-main-content {
-    margin-left: 240px;
+    margin-left: 280px;
     margin-top: 52px;
     padding: 24px;
     min-height: calc(100vh - 52px);
@@ -15,6 +15,13 @@
     /* Hacks de estabilidade REMOVIDOS para evitar glitch */
     /* transform: translateZ(0); */
     /* will-change: margin-left; */
+}
+
+/* Container padrão para alinhar conteúdo das páginas */
+.macos-container {
+    max-width: 1300px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 /* Scrollbar estilo macOS para main content */

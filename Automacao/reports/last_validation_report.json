@@ -1,0 +1,23 @@
+{
+  "executed_at": "2026-04-22T00:20:59.696850",
+  "source": "fixtures/caixa_sample.html",
+  "total_items": 2,
+  "valid_items": 2,
+  "error_count": 0,
+  "warning_count": 0,
+  "errors": [],
+  "warnings": [],
+  "strict_prod": {
+    "enabled": false,
+    "error_count": 0,
+    "warning_count": 0,
+    "errors": [],
+    "warnings": [],
+    "thresholds": {
+      "min_price_coverage": 0.8,
+      "min_location_coverage": 0.8,
+      "min_states": 1,
+      "max_drop_ratio": 0.6
+    }
+  }
+}

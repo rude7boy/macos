@@ -146,16 +146,19 @@ function enableAutocapitalize() {
 // ============================================
 // 6. INICIALIZAR TUDO
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+window.initMacOSUI = function() {
     initThemeToggle();
     initTrafficLights();
     initProfilePopup();
     initSidebarActiveState();
     enableAutocapitalize();
+    console.log('🍎 macOS UI initialized/refreshed');
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.initMacOSUI();
 
     // Observar mudanças no DOM para novos inputs
     const observer = new MutationObserver(enableAutocapitalize);
     observer.observe(document.body, { childList: true, subtree: true });
-
-    console.log('🍎 macOS UI initialized');
 });

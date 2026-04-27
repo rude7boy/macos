@@ -530,7 +530,7 @@
                 });
 
                 async function confirmarArremate(id) {
-                    if (!confirm('Deseja oficializar o arremate deste imóvel? Isso irá gerar a comissão para o minerador original (se houver).')) return;
+                    if (!confirm('Deseja oficializar o arremate deste imóvel?')) return;
 
                     try {
                         const res = await fetch(`/api/carteira/${id}/finalizar-arremate`, { method: 'POST' });

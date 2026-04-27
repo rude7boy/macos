@@ -20,9 +20,9 @@
 
             /* Screen Only Styles */
             .page-container {
-                max-width: 1200px;
+                max-width: 1300px;
                 margin: 0 auto;
-                padding: 24px;
+                padding: 0;
             }
 
             .step-card {
@@ -198,7 +198,7 @@
 
             <main class="macos-main-content">
                 <!-- Input Section (Screen) -->
-                <div class="page-container no-print">
+                <div class="page-container macos-container no-print">
                     <div class="flex justify-between items-center mb-6">
                         <h1 class="text-2xl font-bold dark:text-white">Gerador de Notificação (Amigável)</h1>
                         <button onclick="window.print()"
@@ -362,60 +362,66 @@
                             <img id="pdfLogo" src="" style="display: none;">
                         </div>
                         <div class="doc-header-title">
-                            <h1>NOTIFICAÇÃO PARA DESOCUPAÇÃO DE<br>IMÓVEL DE FORMA AMIGÁVEL</h1>
+                            <h1>NOTIFICAÇÃO EXTRAJUDICIAL<br><span style="font-size: 11pt; font-weight: 600; color: #6b7280;">Solicitação de Desocupação de Imóvel</span></h1>
                         </div>
                     </div>
                     <hr class="doc-header-line">
 
+                    <!-- META INFO BOX -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 9pt;">
+                        <tr>
+                            <td style="padding: 6px 10px; background: #f9fafb; border: 1px solid #e5e7eb; font-weight: 700; color: #374151; width: 30%;">Notificante</td>
+                            <td style="padding: 6px 10px; border: 1px solid #e5e7eb;" id="pdfNomeNotificanteBox">—</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 10px; background: #f9fafb; border: 1px solid #e5e7eb; font-weight: 700; color: #374151;">Notificado</td>
+                            <td style="padding: 6px 10px; border: 1px solid #e5e7eb; text-transform: uppercase; font-weight: 600;" id="pdfNomeNotificadoBox">Ao Ocupante</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 10px; background: #f9fafb; border: 1px solid #e5e7eb; font-weight: 700; color: #374151;">Imóvel</td>
+                            <td style="padding: 6px 10px; border: 1px solid #e5e7eb;" id="pdfEnderecoBox">—</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 10px; background: #f9fafb; border: 1px solid #e5e7eb; font-weight: 700; color: #374151;">Matrícula / Cartório</td>
+                            <td style="padding: 6px 10px; border: 1px solid #e5e7eb;"><span id="pdfMatriculaBox">—</span> / <span id="pdfCartorioBox">—</span></td>
+                        </tr>
+                    </table>
+
                     <!-- BODY -->
                     <div class="doc-body">
-                        <p>Prezada <strong id="pdfNomeNotificado" style="text-transform: uppercase;">RAPHAELA RAMOS DE
-                                VASCONCELOS</strong>,</p>
+                        <p>Prezado(a) <strong id="pdfNomeNotificado" style="text-transform: uppercase;">Ao Ocupante</strong>,</p>
 
-                        <p>Espero que esta mensagem o encontre bem.</p>
+                        <p>Vimos por meio desta, de forma respeitosa e extrajudicial, informar que o imóvel situado à <span id="pdfEnderecoImovelInline">Endereço do Imóvel</span>, registrado sob <strong>Matrícula <span id="pdfMatricula">_______</span> do <span id="pdfCartorio">_______</span></strong>, foi regularmente <strong>arrematado em leilão judicial</strong> pela empresa <strong id="pdfNomeNotificante">Nome da Empresa</strong>, que passou a ser, a partir da data do ato, a legítima proprietária do referido bem imóvel, conforme prevê o Código de Processo Civil Brasileiro.</p>
 
-                        <p>Informamos que <strong id="pdfNomeNotificante">Francisco Tiago Costa Moreira</strong>,
-                            recentemente, adquiriu o imóvel localizado à <span id="pdfEnderecoImovelInline">Rua José
-                                Arteiro de Sousa, 174, Pedra Branca</span>, <strong
-                                style="text-transform: uppercase;">MATRÍCULA <span id="pdfMatricula">9679</span> DO
-                                <span id="pdfCartorio">2º OFÍCIO DE REGISTRO DE IMÓVEIS DE PACAJUS/CE</span></strong>,
-                            onde você atualmente reside.</p>
+                        <p>Em razão da aquisição do imóvel por meio do referido leilão, a propriedade plena e irrevogável do bem foi transferida à notificante, incluindo o direito de uso, gozo e disposição do imóvel, com todos os seus acessórios e benfeitorias, nos termos da legislação vigente.</p>
 
-                        <p>Com isso, gostaríamos de tratar de forma amigável a questão da desocupação, de modo que
-                            possamos encontrar uma solução que seja conveniente para ambos, sem a necessidade de
-                            recorrer a medidas judiciais.</p>
+                        <p>Desta forma, vimos por meio desta notificação solicitar, de forma amigável, a <strong>desocupação voluntária do imóvel</strong>, no prazo de <strong>30 (trinta) dias corridos</strong> a contar do recebimento desta, a fim de que possamos formalizar a posse do bem sem a necessidade de recorrer às vias judiciais.</p>
 
-                        <p>Gostaríamos de apresentar algumas possibilidades para facilitar esse processo, e ficaremos à
-                            disposição para ajustá-las a depender das suas necessidades.</p>
+                        <p>Ressaltamos que nossa intenção é tratar esta situação com o máximo de respeito e consideração, buscando uma solução que seja digna e viável para todas as partes envolvidas. Estamos à disposição para dialogar sobre eventuais acordos que facilitem a transição, incluindo prazos adicionais ou auxílio nas tratativas de mudança, desde que haja boa-fé e colaboração do(a) notificado(a).</p>
 
-                        <p>Nosso objetivo é garantir que a transição seja tranquila e justa para todos. Após a
-                            desocupação, podemos formalizar um termo que regulamente a situação de maneira clara, sem a
-                            necessidade de formalidades excessivas. O importante é que todos os aspectos do contrato
-                            sejam encerrados de forma amigável e sem pendências.</p>
+                        <p>Caso não haja a desocupação voluntária no prazo estipulado, esta empresa se verá na obrigatoriedade de adotar as medidas judiciais cabíveis, inclusive ação de reintegração de posse, o que poderá acarretar ao(à) notificado(a) custas processuais e outros ônus legais.</p>
 
-                        <p>Nossa intenção é que possamos resolver essa questão de forma amigável, sem pressões, e com o
-                            máximo de respeito pelas necessidades de ambos.</p>
-
-                        <p>Se algum dos pontos apresentados não for conveniente ou se vocês tiverem sugestões, estamos
-                            completamente aberto para negociarmos conforme for necessário.</p>
-
-                        <p>Agradecemos a sua compreensão e colaboração.</p>
-
-                        <p>Ficamos à disposição para conversarmos sobre esses pontos e encontrar a melhor solução para
-                            todos.</p>
+                        <p>Agradecemos pela compreensão e aguardamos um retorno dentro do prazo estabelecido.</p>
 
                         <p>Atenciosamente,</p>
                     </div>
 
-                    <!-- FOOTER -->
+                    <!-- FOOTER / SIGNATURE -->
                     <div class="doc-footer">
-                        <div class="footer-company-name" id="pdfNomeNotificanteSign">NOME DA EMPRESA</div>
-                        <div class="footer-contact" id="pdfTelefone">85 99222-9293 ou 85 99858-6661</div>
-                        <div class="footer-contact" id="pdfEmail" style="text-transform: lowercase;">
-                            fortal.tributos@gmail.com</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 40px;">
+                            <div>
+                                <div style="border-top: 1px solid #000; width: 220px; margin-bottom: 6px;"></div>
+                                <div class="footer-company-name" id="pdfNomeNotificanteSign">NOME DA EMPRESA</div>
+                                <div class="footer-contact" id="pdfTelefone"></div>
+                                <div class="footer-contact" id="pdfEmail" style="text-transform: lowercase;"></div>
+                            </div>
+                            <div style="text-align: right; font-size: 8.5pt; color: #6b7280;">
+                                <p style="margin: 0;">Data de emissão:</p>
+                                <p style="margin: 0; font-weight: 700;" id="pdfDataEmissao"></p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </main>
 
             <script>
                 // --- COMPANY MANAGEMENT LOGIC ---
@@ -536,18 +542,32 @@
                     const nomeNotificante = document.getElementById('inputNomeNotificante').value || 'Nome do Notificante';
                     document.getElementById('pdfNomeNotificante').innerText = nomeNotificante;
                     document.getElementById('pdfNomeNotificanteSign').innerText = nomeNotificante;
+                    document.getElementById('pdfNomeNotificanteBox').innerText = nomeNotificante;
 
                     document.getElementById('pdfTelefone').innerText = document.getElementById('inputTelefoneNotificante').value || '';
                     document.getElementById('pdfEmail').innerText = document.getElementById('inputEmailNotificante').value || '';
 
-                    document.getElementById('pdfNomeNotificado').innerText = document.getElementById('inputNomeNotificado').value || 'Ao Ocupante';
+                    const nomeNotificado = document.getElementById('inputNomeNotificado').value || 'Ao Ocupante';
+                    document.getElementById('pdfNomeNotificado').innerText = nomeNotificado;
+                    document.getElementById('pdfNomeNotificadoBox').innerText = nomeNotificado;
 
                     const endImovel = document.getElementById('inputEnderecoImovel').value || 'Endereço do Imóvel';
                     const cidImovel = document.getElementById('inputCidadeImovel').value || '';
-                    document.getElementById('pdfEnderecoImovelInline').innerText = endImovel + (cidImovel ? `, ${cidImovel}` : '');
+                    const endFull = endImovel + (cidImovel ? `, ${cidImovel}` : '');
+                    document.getElementById('pdfEnderecoImovelInline').innerText = endFull;
+                    document.getElementById('pdfEnderecoBox').innerText = endFull;
 
-                    document.getElementById('pdfMatricula').innerText = document.getElementById('inputMatricula').value || '_______';
-                    document.getElementById('pdfCartorio').innerText = document.getElementById('inputCartorio').value || '_______';
+                    const matricula = document.getElementById('inputMatricula').value || '_______';
+                    const cartorio = document.getElementById('inputCartorio').value || '_______';
+                    document.getElementById('pdfMatricula').innerText = matricula;
+                    document.getElementById('pdfCartorio').innerText = cartorio;
+                    document.getElementById('pdfMatriculaBox').innerText = matricula;
+                    document.getElementById('pdfCartorioBox').innerText = cartorio;
+
+                    // Auto date
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+                    document.getElementById('pdfDataEmissao').innerText = dateStr;
 
                     const pdfLogo = document.getElementById('pdfLogo');
                     if (currentLogoBase64) {
@@ -558,11 +578,18 @@
                     }
                 }
 
-                document.addEventListener('DOMContentLoaded', () => {
+                const initPage = () => {
                     refreshCompanySelect();
                     updatePDF();
-                });
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initPage);
+                } else {
+                    initPage();
+                }
             </script>
-</body>
+            </main>
+    </body>
 
 </html>

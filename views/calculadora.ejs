@@ -70,7 +70,7 @@
         <%- include('partials/macos-sidebar', { user: user }) %>
 
             <main class="macos-main-content">
-                <div class="animate-fade-in" style="padding-bottom: 40px; max-width: 1200px; margin: 0 auto;">
+                <div class="animate-fade-in macos-container" style="padding-bottom: 40px;">
 
                     <!-- Subtítulo (Abaixo da linha do Header) -->
                     <div style="margin-bottom: 24px; padding-left: 4px;">
@@ -653,7 +653,6 @@
                                                 <% } %>
 
                 </div>
-            </main>
 
             <!-- Modal Detalhamento (macOS Sonoma Style) -->
             <% if (results) { %>
@@ -1069,14 +1068,20 @@
                         }
 
                         // Inicializa estado
-                        document.addEventListener('DOMContentLoaded', () => {
+                        const initCalculator = () => {
                             const currentType = document.getElementById('tipoPagamento').value;
                             setPaymentType(currentType);
 
                             // Inicializa estado do toggle ITBI
                             const currentItbiBase = document.getElementById('itbiBase').value;
                             setItbiBase(currentItbiBase);
-                        });
+                        };
+
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', initCalculator);
+                        } else {
+                            initCalculator();
+                        }
 
                         // Função para alternar base de cálculo do ITBI
                         function setItbiBase(base) {
@@ -1927,6 +1932,7 @@
                             fecharModalAssessoriaV2();
                         }
                     </script>
+            </main>
 </body>
 
 </html>

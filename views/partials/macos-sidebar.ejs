@@ -2,138 +2,243 @@
      🍎 macOS Sidebar (Estilo Finder)
      ============================================ -->
 <aside class="macos-sidebar">
-    <!-- Header da Sidebar -->
-    <div class="macos-sidebar-header">
-        <div class="macos-sidebar-logo"
-            style="display: flex; justify-content: center; align-items: center; padding: 20px 0;">
-            <div
-                style="background: rgba(0, 0, 0, 0.08); border-radius: 16px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                <i class="fa-solid fa-building-columns"
-                    style="font-size: 48px; color: var(--macos-text-primary); margin: 10px;"></i>
-            </div>
+    <!-- Header Minimalista -->
+    <div style="padding: 24px 16px 12px 24px; display: flex; align-items: center; gap: 12px;">
+        <div style="background: var(--macos-accent); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px var(--macos-accent-light);">
+            <i class="fa-solid fa-building-columns" style="color: white; font-size: 16px;"></i>
         </div>
+        <span style="font-size: 16px; font-weight: 800; letter-spacing: -0.5px; color: var(--macos-text-primary);">Arremata!</span>
     </div>
 
-    <!-- Navegação Principal -->
-    <nav style="padding: 12px 8px;">
-        <!-- Principal -->
-        <div class="macos-sidebar-section">
-            <div class="macos-sidebar-section-title">Principal</div>
+    <nav style="padding: 12px 12px;">
+        <!-- Favoritos / Principal -->
+        <div class="macos-sidebar-section" style="padding-top: 0;">
             <a href="/" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-chart-pie"></i></span>
-                <span class="macos-sidebar-item-text">Dashboard</span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-house"></i></span>
+                <span class="macos-sidebar-item-text">Início</span>
             </a>
-        </div>
-
-        <!-- Passo 1: Análise -->
-        <div class="macos-sidebar-section">
-            <div class="macos-sidebar-section-title">Análise de Viabilidade</div>
-
-            <a href="/calculadora" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-calculator"></i></span>
-                <span class="macos-sidebar-item-text">Calculadora</span>
-            </a>
-
             <a href="/oportunidades" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-gem"></i></span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-compass"></i></span>
                 <span class="macos-sidebar-item-text">Oportunidades</span>
             </a>
         </div>
 
-        <!-- Passo 2: Venda -->
+        <!-- Ferramentas de Análise -->
         <div class="macos-sidebar-section">
-            <div class="macos-sidebar-section-title">Marketing & Vendas</div>
-
-            <a href="/da-vinci" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-file-signature"></i></span>
-                <span class="macos-sidebar-item-text">Gerador de Proposta</span>
+            <div class="macos-sidebar-section-title">Análise & Simulação</div>
+            <a href="/calculadora" class="macos-sidebar-item">
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-calculator" style="color: #FF9500;"></i></span>
+                <span class="macos-sidebar-item-text">Calculadora</span>
             </a>
-
-            <a href="/layout" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-brands fa-instagram"></i></span>
-                <span class="macos-sidebar-item-text">Gerador de Stories</span>
-            </a>
-        </div>
-
-        <!-- Documentos / Jurídico -->
-        <div class="macos-sidebar-section">
-            <div class="macos-sidebar-section-title">Jurídico & Docs</div>
-
-            <a href="/notificacao" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-scale-balanced"></i></span>
-                <span class="macos-sidebar-item-text">Notificação Extrajudicial</span>
-            </a>
-
             <a href="/analise-documentos" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-wand-magic-sparkles" style="color: #AF52DE;"></i></span>
                 <span class="macos-sidebar-item-text">Análise Jurídica IA</span>
             </a>
+            <a href="/notificacao" class="macos-sidebar-item">
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-gavel" style="color: #FF3B30;"></i></span>
+                <span class="macos-sidebar-item-text">Notificação</span>
+            </a>
         </div>
 
-        <!-- Passo 3: Gestão -->
+        <!-- Marketing & Conteúdo -->
         <div class="macos-sidebar-section">
-            <div class="macos-sidebar-section-title">Gestão & CRM</div>
+            <div class="macos-sidebar-section-title">Comercial</div>
+            <a href="/da-vinci" class="macos-sidebar-item">
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-file-contract" style="color: #007AFF;"></i></span>
+                <span class="macos-sidebar-item-text">Gerar Proposta</span>
+            </a>
+            <a href="/layout" class="macos-sidebar-item">
+                <span class="macos-sidebar-item-icon"><i class="fa-brands fa-instagram" style="color: #FF2D55;"></i></span>
+                <span class="macos-sidebar-item-text">Criativo Stories</span>
+            </a>
+        </div>
 
-
+        <!-- CRM e Gestão -->
+        <div class="macos-sidebar-section">
+            <div class="macos-sidebar-section-title">Gestão</div>
             <a href="/leads" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-filter-circle-dollar"></i></span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-bullseye" style="color: #34C759;"></i></span>
                 <span class="macos-sidebar-item-text">Novos Leads</span>
             </a>
-
-
             <a href="/carteira" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-users"></i></span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-user-group"></i></span>
                 <span class="macos-sidebar-item-text">Meus Clientes</span>
             </a>
-
             <a href="/historico" class="macos-sidebar-item">
-                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                <span class="macos-sidebar-item-icon"><i class="fa-solid fa-box-archive"></i></span>
                 <span class="macos-sidebar-item-text">Meus Arremates</span>
             </a>
         </div>
 
         <% if (user && user.isAdmin) { %>
             <div class="macos-sidebar-section">
-                <div class="macos-sidebar-section-title">Administração</div>
+                <div class="macos-sidebar-section-title">Admin</div>
                 <a href="/admin/invites" class="macos-sidebar-item">
-                    <span class="macos-sidebar-item-icon"><i class="fa-solid fa-paper-plane"></i></span>
-                    <span class="macos-sidebar-item-text">Gerenciar Convites</span>
+                    <span class="macos-sidebar-item-icon"><i class="fa-solid fa-key"></i></span>
+                    <span class="macos-sidebar-item-text">Convites</span>
                 </a>
                 <a href="/admin/leads-history" class="macos-sidebar-item">
-                    <span class="macos-sidebar-item-icon"><i class="fa-solid fa-eye"></i></span>
-                    <span class="macos-sidebar-item-text">Controlador de Leads</span>
+                    <span class="macos-sidebar-item-icon"><i class="fa-solid fa-chart-line"></i></span>
+                    <span class="macos-sidebar-item-text">Métricas Leads</span>
                 </a>
             </div>
-            <% } %>
+        <% } %>
 
-                <div
-                    style="margin-top: 20px; padding: 10px; border-top: 1px solid rgba(0,0,0,0.1); text-align: center; font-size: 10px; color: var(--macos-text-tertiary);">
-                    <p>Plataforma criada por <strong>Cesar Ericky Cruz de Andrade</strong>.</p>
-                    <p>A plataforma pertence a Cesar Ericky Cruz de Andrade.</p>
-                </div>
+        <div style="margin-top: auto; padding: 24px 12px 12px; opacity: 0.4; font-size: 9px; text-align: center; color: var(--macos-text-tertiary);">
+            <p>© Arremata! by Cesar Ericky</p>
+        </div>
     </nav>
 </aside>
 
 <script>
-    // Marcar item ativo baseado na URL atual
+    // Sistema de Navegação PJAX Avançado (Premium macOS Experience)
     document.addEventListener('DOMContentLoaded', () => {
-        const currentPath = window.location.pathname;
-        const currentHash = window.location.hash;
+        if (window.sidebarPjaxInitialized) return;
+        window.sidebarPjaxInitialized = true;
+
+        const mainSelector = '.macos-main-content';
         const sidebarItems = document.querySelectorAll('.macos-sidebar-item');
 
-        sidebarItems.forEach(item => {
-            const href = item.getAttribute('href');
+        const updateActiveState = () => {
+            const currentPath = window.location.pathname;
+            sidebarItems.forEach(item => {
+                const href = item.getAttribute('href');
+                const isActive = href === currentPath || (href !== '/' && currentPath.startsWith(href));
+                item.classList.toggle('active', isActive);
+            });
+        };
 
-            // Verificar se é a página atual
-            if (href === currentPath || (href.includes('#') && href === currentPath + currentHash)) {
-                item.classList.add('active');
+        const loadPage = async (url, pushToHistory = true) => {
+            const mainContent = document.querySelector(mainSelector);
+            if (!mainContent) {
+                window.location.href = url;
+                return;
             }
 
-            // Adicionar listener para marcar como ativo ao clicar
-            item.addEventListener('click', () => {
-                sidebarItems.forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-            });
+            // Iniciar animação de transição (Sutil e Rápida)
+            mainContent.style.transition = 'opacity 0.12s ease-out, transform 0.12s ease-out';
+            mainContent.style.opacity = '0.4'; // Don't go to full 0 to avoid white flash
+            mainContent.style.transform = 'scale(0.995)';
+
+            try {
+                // Fetch do conteúdo
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Falha na resposta do servidor');
+                
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const newContent = doc.querySelector(mainSelector);
+                const newTitle = doc.querySelector('title');
+                
+                if (newContent) {
+                    // Sincronizar com o fim da animação de saída
+                    await new Promise(r => setTimeout(r, 100));
+
+                    // Limpar estilos de páginas anteriores injetados via PJAX
+                    document.querySelectorAll('.pjax-dynamic-style').forEach(el => el.remove());
+
+                    // Injetar novos estilos
+                    const newStyles = doc.querySelectorAll('style, link[rel="stylesheet"]');
+                    newStyles.forEach(style => {
+                        const isLink = style.tagName === 'LINK';
+                        const href = isLink ? style.getAttribute('href') : null;
+                        
+                        // Se for um link, verifica se já existe no head original
+                        if (isLink && document.querySelector(`link[href="${href}"]:not(.pjax-dynamic-style)`)) return;
+                        
+                        const styleClone = style.cloneNode(true);
+                        styleClone.classList.add('pjax-dynamic-style');
+                        document.head.appendChild(styleClone);
+                    });
+
+                    // Atualizar o DOM
+                    mainContent.innerHTML = newContent.innerHTML;
+                    if (newTitle) document.title = newTitle.textContent;
+                    
+                    // Gerenciar Histórico
+                    if (pushToHistory) {
+                        window.history.pushState({ pjax: true }, '', url);
+                    }
+                    
+                    // Atualizar UI Global
+                    updateActiveState();
+                    if (window.initMacOSUI) window.initMacOSUI();
+                    
+                    // Executar scripts da nova página
+                    const scripts = newContent.querySelectorAll('script');
+                    scripts.forEach(oldScript => {
+                        const newScript = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(attr => {
+                            if (attr.name !== 'src') newScript.setAttribute(attr.name, attr.value);
+                        });
+                        
+                        if (oldScript.src) {
+                            newScript.src = oldScript.src;
+                        } else {
+                            newScript.textContent = oldScript.innerHTML;
+                        }
+                        
+                        document.body.appendChild(newScript);
+                        // Remover script injetado para manter o DOM limpo (apenas inline)
+                        if (newScript.parentNode && !newScript.src) newScript.parentNode.removeChild(newScript);
+                    });
+
+                    // Scroll Reset
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+
+                    // Finalizar animação (Entrada suave)
+                    requestAnimationFrame(() => {
+                        mainContent.style.opacity = '1';
+                        mainContent.style.transform = 'scale(1) translateY(0)';
+                    });
+                } else {
+                    // Fallback para recarregamento total se o seletor não for encontrado
+                    window.location.href = url;
+                }
+            } catch (err) {
+                console.error('PJAX Error:', err);
+                window.location.href = url;
+            }
+        };
+
+        // Delegação de eventos para capturar todos os cliques em links locais
+        document.body.addEventListener('click', (e) => {
+            // Ignora se o clique foi com teclas de modificação
+            if (e.ctrlKey || e.shiftKey || e.metaKey || e.button !== 0) return;
+
+            const link = e.target.closest('a');
+            if (!link) return;
+
+            const href = link.getAttribute('href');
+            const target = link.getAttribute('target');
+
+            // Critérios para INTERCEPTAR via PJAX:
+            // 1. Link local (não começa com http/https)
+            // 2. Não é âncora interna (#)
+            // 3. Não tem target="_blank"
+            // 4. Não é um link de sistema (mailto, tel, javascript)
+            // 5. Não tem o atributo data-pjax="false"
+            
+            const isLocal = href && !href.match(/^https?:\/\//) && !href.startsWith('//');
+            const isAnchor = href && href.startsWith('#');
+            const isBlank = target === '_blank';
+            const isSystem = href && (href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:'));
+            const isDisabled = link.hasAttribute('data-pjax-false');
+
+            if (isLocal && !isAnchor && !isBlank && !isSystem && !isDisabled) {
+                e.preventDefault();
+                loadPage(href);
+            }
         });
+
+        // Lidar com navegação via botões Voltar/Avançar
+        window.addEventListener('popstate', (e) => {
+            // Se o estado indicar que foi uma navegação PJAX ou se quisermos forçar SPA no histórico
+            loadPage(window.location.pathname, false);
+        });
+
+        updateActiveState();
     });
 </script>
